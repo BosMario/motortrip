@@ -13,7 +13,9 @@ import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from 
 import { fetchRoute } from './lib/osrm'
 import { fetchPois } from './lib/overpass'
 import { KIND_META } from './lib/poiMeta'
-import type { SearchResult } from './lib/nominatim'
+import { reverseGeocode, type SearchResult } from './lib/nominatim'
+import { toPng } from 'html-to-image'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import {
   deleteTrip as delTrip,
   deletePlace,
@@ -61,6 +63,16 @@ export default function App() {
   const [kinds, setKinds] = useState<Set<PoiKind>>(() => new Set(ALL_KINDS))
 
   const [addingPoint, setAddingPoint] = useState(false)
+  const [roundTrip, setRoundTrip] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const summaryRef = useRef<HTMLDivElement>(null)
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(_url, reg) {
+      // เช็คเวอร์ชันใหม่ตอนเปิด + ทุก 1 นาที (กันค้างแคช)
+      if (reg) setInterval(() => reg.update().catch(() => {}), 60_000)
+    },
+  })
   const [savedTrips, setSavedTrips] = useState<Trip[]>([])
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([])
   const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
@@ -90,12 +102,29 @@ export default function App() {
 
   const routeCtrl = useRef<AbortController | null>(null)
   const poiCtrl = useRef<AbortController | null>(null)
-  const debouncedWps = useDebounced(waypoints, 600)
+
+  // ไป-กลับ: ต่อจุดเริ่มไว้ท้ายสุดสำหรับคำนวณเส้นทาง (ไม่กระทบรายการจุดแวะที่แสดง)
+  const routeWaypoints = useMemo(
+    () =>
+      roundTrip && waypoints.length >= 2
+        ? [...waypoints, { ...waypoints[0], id: waypoints[0].id + '#ret' }]
+        : waypoints,
+    [roundTrip, waypoints]
+  )
+  const debouncedWps = useDebounced(routeWaypoints, 600)
 
   const notify = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(''), 2600)
   }, [])
+
+  // มีเวอร์ชันใหม่ → อัปเดต+รีโหลดอัตโนมัติ (ไม่ต้องล้างแคชเอง)
+  useEffect(() => {
+    if (needRefresh) {
+      notify('กำลังอัปเดตเป็นเวอร์ชันใหม่…')
+      updateServiceWorker(true)
+    }
+  }, [needRefresh, notify, updateServiceWorker])
 
   // โหลดทริปที่บันทึก + ตรวจ URL แชร์ตอนเปิดแอป
   useEffect(() => {
@@ -176,15 +205,62 @@ export default function App() {
 
   const removeWaypoint = (id: string) => setWaypoints((prev) => prev.filter((w) => w.id !== id))
 
-  const moveWaypoint = (id: string, dir: -1 | 1) =>
+  const reorderWaypoints = (from: number, to: number) =>
     setWaypoints((prev) => {
-      const i = prev.findIndex((w) => w.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= prev.length) return prev
+      if (from < 0 || to < 0 || from >= prev.length || to >= prev.length) return prev
       const next = [...prev]
-      ;[next[i], next[j]] = [next[j], next[i]]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
       return next
     })
+
+  const useCurrentLocation = () => {
+    if (!('geolocation' in navigator)) return notify('อุปกรณ์ไม่รองรับระบุตำแหน่ง')
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (p) => {
+        const lat = p.coords.latitude
+        const lng = p.coords.longitude
+        const nm = await reverseGeocode(lat, lng).catch(() => 'ตำแหน่งของฉัน')
+        setWaypoints((prev) => {
+          const wp: Waypoint = { id: uid(), name: `📍 ${nm}`, lat, lng }
+          return prev.length ? [wp, ...prev.slice(1)] : [wp] // แทนจุดเริ่ม
+        })
+        setLocating(false)
+        notify('ตั้งจุดเริ่มเป็นตำแหน่งปัจจุบันแล้ว')
+      },
+      (e) => {
+        setLocating(false)
+        notify(e.code === e.PERMISSION_DENIED ? 'ไม่ได้รับอนุญาตเข้าถึงตำแหน่ง' : 'หาตำแหน่งไม่ได้')
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  const exportSummary = async () => {
+    if (!summaryRef.current) return
+    setExporting(true)
+    try {
+      const dataUrl = await toPng(summaryRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: '#0a0a0c' })
+      const file = new File([await (await fetch(dataUrl)).blob()], `moto-trip-${name || 'trip'}.png`, {
+        type: 'image/png',
+      })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: name }).catch(() => {})
+        notify('เปิดหน้าต่างแชร์รูปแล้ว 📸')
+      } else {
+        const a = document.createElement('a')
+        a.href = dataUrl
+        a.download = file.name
+        a.click()
+        notify('บันทึกรูปสรุปทริปแล้ว 📸')
+      }
+    } catch {
+      notify('สร้างรูปไม่สำเร็จ ลองใหม่')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const addPoiAsWaypoint = (poi: Poi) => {
     addWaypoint({ name: poi.name, lat: poi.lat, lng: poi.lng, custom: true })
@@ -427,6 +503,14 @@ export default function App() {
           <div className="flex flex-col gap-3 pt-1">
             <SearchBox onPick={onPickSearch} />
 
+            <button
+              onClick={useCurrentLocation}
+              disabled={locating}
+              className="btn btn-ghost w-full py-2.5 text-sm disabled:opacity-50"
+            >
+              {locating ? 'กำลังหาตำแหน่ง…' : '📍 ใช้ตำแหน่งปัจจุบันเป็นจุดเริ่ม'}
+            </button>
+
             {/* สถานะเส้นทาง — การ์ดสถิติ */}
             <div className="card px-4 py-3">
               {routeLoading ? (
@@ -452,12 +536,24 @@ export default function App() {
               </p>
             )}
 
-            <WaypointList
-              waypoints={waypoints}
-              route={route}
-              onRemove={removeWaypoint}
-              onMove={moveWaypoint}
-            />
+            {/* ไป-กลับ */}
+            <button
+              onClick={() => setRoundTrip((v) => !v)}
+              className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm border transition ${
+                roundTrip ? 'chip-on' : 'card-2 text-dim'
+              }`}
+            >
+              <span>🔁 ทริปไป-กลับ (วนกลับจุดเริ่ม)</span>
+              <span
+                className={`w-9 h-5 rounded-full relative transition ${roundTrip ? 'bg-white/30' : 'bg-white/10'}`}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${roundTrip ? 'left-[18px]' : 'left-0.5'}`}
+                />
+              </span>
+            </button>
+
+            <WaypointList waypoints={waypoints} route={route} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
 
             {/* ค้นหาจุดแวะตามเส้นทาง */}
             <div className="border-t border-white/[0.07] pt-3">
@@ -536,8 +632,11 @@ export default function App() {
               </label>
             </div>
 
-            <TripSummary name={name} date={date} waypoints={waypoints} route={route} />
-            <p className="text-xs text-dim text-center">📸 แคปหน้าจอการ์ดด้านบนส่งเข้ากลุ่ม LINE ได้เลย</p>
+            <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
+
+            <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
+              {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
+            </button>
 
             <div className="grid grid-cols-2 gap-2">
               <button onClick={saveTrip} className="btn btn-primary py-3">

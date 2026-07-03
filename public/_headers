@@ -2,8 +2,19 @@
 /manifest.json
   Content-Type: application/manifest+json
 
+# ไฟล์ที่มี hash ในชื่อ → แคชยาวได้ปลอดภัย
 /icons/*
   Cache-Control: public, max-age=31536000, immutable
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# HTML + service worker → ห้ามแคชค้าง เพื่อให้ได้เวอร์ชันใหม่ทุกครั้ง
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/registerSW.js
+  Cache-Control: public, max-age=0, must-revalidate

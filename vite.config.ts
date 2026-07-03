@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      registerType: 'autoUpdate', // เจอเวอร์ชันใหม่ = อัปเดต+รีโหลดให้อัตโนมัติ (ไม่ค้างแคช)
+      injectRegister: false, // ลงทะเบียน SW ผ่าน useRegisterSW hook แทน
       // ใช้ manifest.json ของเราเองใน public/ (ไม่ให้ปลั๊กอิน gen ทับ)
       manifest: false,
       includeAssets: ['icons/*.png', 'icons/*.svg'],

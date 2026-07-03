@@ -1,4 +1,24 @@
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search'
+const NOMINATIM_REVERSE = 'https://nominatim.openstreetmap.org/reverse'
+
+/** หาชื่อสถานที่จากพิกัด (สำหรับตั้งชื่อจุด "ตำแหน่งฉัน") */
+export async function reverseGeocode(lat: number, lng: number, signal?: AbortSignal): Promise<string> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lng),
+    format: 'jsonv2',
+    zoom: '16',
+    'accept-language': 'th',
+  })
+  try {
+    const res = await fetch(`${NOMINATIM_REVERSE}?${params}`, { signal, headers: { Accept: 'application/json' } })
+    if (!res.ok) return 'ตำแหน่งของฉัน'
+    const d = (await res.json()) as { name?: string; display_name?: string }
+    return d.name || d.display_name?.split(',').slice(0, 2).join(' ') || 'ตำแหน่งของฉัน'
+  } catch {
+    return 'ตำแหน่งของฉัน'
+  }
+}
 
 export interface SearchResult {
   name: string
