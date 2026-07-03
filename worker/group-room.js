@@ -90,6 +90,8 @@ export class GroupRoom {
         if (a && a.id) riders.push(a)
       }
       const route = await this.state.storage.get('route')
+      const pois = await this.state.storage.get('pois')
+      const checkins = await this.state.storage.get('checkins')
       ws.send(
         JSON.stringify({
           type: 'snapshot',
@@ -98,6 +100,8 @@ export class GroupRoom {
           hasAdmin: !!stored,
           riders,
           route: route || null,
+          pois: pois || [],
+          checkins: checkins || {},
         })
       )
       this.broadcast({ type: 'join', rider: att }, ws)
@@ -158,6 +162,47 @@ export class GroupRoom {
       }
       await this.state.storage.put('route', route)
       this.broadcast({ type: 'route', route, setBy: att.name }) // ส่งให้ทุกคนรวมแอดมิน
+      return
+    }
+
+    if (data.type === 'pois') {
+      // เฉพาะแอดมิน — แชร์ร้าน/ปั๊มที่ค้นแล้วให้สมาชิก (สมาชิกไม่ต้องเรียก Overpass เอง)
+      if (!att.admin) {
+        try {
+          ws.send(JSON.stringify({ type: 'forbidden', reason: 'admin-only' }))
+        } catch {
+          /* noop */
+        }
+        return
+      }
+      const pois = Array.isArray(data.pois)
+        ? data.pois.slice(0, 80).map((p) => ({
+            id: String(p.id || '').slice(0, 20),
+            kind: String(p.kind || 'restaurant').slice(0, 12),
+            name: String(p.name || '').slice(0, 80),
+            lat: Number(p.lat),
+            lng: Number(p.lng),
+            cuisine: p.cuisine ? String(p.cuisine).slice(0, 60) : undefined,
+            openingHours: p.openingHours ? String(p.openingHours).slice(0, 60) : undefined,
+            website: p.website ? String(p.website).slice(0, 200) : undefined,
+            notable: !!p.notable,
+            distFromRoute: p.distFromRoute == null ? undefined : Number(p.distFromRoute),
+            popularity: Number(p.popularity) || 0,
+          }))
+        : []
+      await this.state.storage.put('pois', pois)
+      this.broadcast({ type: 'pois', pois })
+      return
+    }
+
+    if (data.type === 'checkin') {
+      const stopIndex = Number(data.stopIndex)
+      if (!Number.isInteger(stopIndex) || stopIndex < 0) return
+      const checkins = (await this.state.storage.get('checkins')) || {}
+      const now = Date.now()
+      checkins[att.id] = { stopIndex, ts: now, name: att.name, color: att.color }
+      await this.state.storage.put('checkins', checkins)
+      this.broadcast({ type: 'checkin', id: att.id, name: att.name, color: att.color, stopIndex, ts: now })
       return
     }
 

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { GroupMessage, GroupRole, Rider, RiderProfile, SharedRoute, SosAlert } from '../types'
+import type { GroupMessage, GroupRole, Poi, Rider, RiderProfile, SharedRoute, SosAlert } from '../types'
+
+export interface Checkin {
+  stopIndex: number
+  ts: number
+  name: string
+  color: string
+}
 import { GroupClient } from '../lib/group'
 import { useWakeLock } from './useWakeLock'
 
@@ -36,6 +43,8 @@ export function useGroup() {
   const [messages, setMessages] = useState<GroupMessage[]>([])
   const [sos, setSos] = useState<SosAlert | null>(null)
   const [role, setRole] = useState<GroupRole | null>(null)
+  const [sharedPois, setSharedPois] = useState<Poi[]>([])
+  const [checkins, setCheckins] = useState<Record<string, Checkin>>({})
 
   const [blocked, setBlocked] = useState<{ reason: string; ts: number } | null>(null)
 
@@ -60,6 +69,8 @@ export function useGroup() {
     setSos(null)
     setBlocked(null)
     setRole(null)
+    setSharedPois([])
+    setCheckins({})
     msgTimes.current = []
     sosTs.current = 0
     setRoomCode(code)
@@ -80,6 +91,8 @@ export function useGroup() {
                 return m
               })
               if (msg.route) setSharedRoute(msg.route)
+              setSharedPois(Array.isArray(msg.pois) ? msg.pois : [])
+              setCheckins(msg.checkins && typeof msg.checkins === 'object' ? msg.checkins : {})
               break
           case 'join':
             if (msg.rider?.id) upsert(msg.rider)
@@ -95,6 +108,15 @@ export function useGroup() {
             break
           case 'route':
             setSharedRoute(msg.route || null)
+            break
+          case 'pois':
+            setSharedPois(Array.isArray(msg.pois) ? msg.pois : [])
+            break
+          case 'checkin':
+            setCheckins((prev) => ({
+              ...prev,
+              [msg.id]: { stopIndex: msg.stopIndex, ts: msg.ts, name: msg.name, color: msg.color },
+            }))
             break
           case 'msg':
             setMessages((prev) => [...prev.slice(-29), msg as GroupMessage])
@@ -137,6 +159,14 @@ export function useGroup() {
 
   const shareRoute = useCallback((route: SharedRoute) => {
     clientRef.current?.emit({ type: 'route', route })
+  }, [])
+
+  const sharePois = useCallback((pois: Poi[]) => {
+    clientRef.current?.emit({ type: 'pois', pois })
+  }, [])
+
+  const checkin = useCallback((stopIndex: number) => {
+    clientRef.current?.emit({ type: 'checkin', stopIndex })
   }, [])
 
   // ส่งข้อความ: กันสแปม (ห่าง ≥1.2 วิ, ไม่เกิน 5 ข้อความ/10 วิ) — คืน false ถ้าถูกบล็อก
@@ -233,10 +263,14 @@ export function useGroup() {
     role,
     isAdmin: role === 'admin',
     inRoom: !!roomCode,
+    sharedPois,
+    checkins,
     join,
     leave,
     updateProfile,
     shareRoute,
+    sharePois,
+    checkin,
     sendMessage,
     sendSOS,
     dismissSos,

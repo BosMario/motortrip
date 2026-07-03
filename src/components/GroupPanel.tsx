@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { GroupMessage, Rider, RiderProfile, SharedRoute } from '../types'
+import type { GroupMessage, Rider, RiderProfile, SharedRoute, Waypoint } from '../types'
+import type { RiderProgress } from '../lib/convoy'
+import type { Checkin } from '../hooks/useGroup'
 import { formatDistance, haversine } from '../lib/format'
 import { makeRoomCode } from '../lib/group'
 import { shareUrl } from '../lib/share'
@@ -38,6 +40,9 @@ interface Props {
   followId: string | null
   isAdmin: boolean
   inRoom: boolean
+  convoy: Record<string, RiderProgress>
+  checkins: Record<string, Checkin>
+  waypoints: Waypoint[]
   onJoin: (code: string, profile: RiderProfile, isCreate: boolean) => void
   onLeave: () => void
   onToggleShare: (on: boolean) => void
@@ -66,6 +71,9 @@ export default function GroupPanel({
   messages,
   followId,
   isAdmin,
+  convoy,
+  checkins,
+  waypoints,
   onJoin,
   onLeave,
   onToggleShare,
@@ -104,14 +112,26 @@ export default function GroupPanel({
     )
   }
 
-  // จัดเรียง roster: ฉันขึ้นก่อน แล้วตามชื่อ
+  // จัดเรียง roster ตามลำดับขบวน (นำก่อน); ถ้าไม่มีข้อมูลเส้นทาง → ฉันก่อนแล้วตามชื่อ
   const roster = useMemo(() => {
     return [...riders].sort((a, b) => {
+      const ca = convoy[a.id]?.order
+      const cb = convoy[b.id]?.order
+      if (ca && cb) return ca - cb
+      if (ca) return -1
+      if (cb) return 1
       if (a.id === myId) return -1
       if (b.id === myId) return 1
       return (a.name || '').localeCompare(b.name || '')
     })
-  }, [riders, myId])
+  }, [riders, myId, convoy])
+
+  // จำนวนคนเช็คอินต่อจุด
+  const checkinByStop = useMemo(() => {
+    const m: Record<number, number> = {}
+    for (const c of Object.values(checkins)) m[c.stopIndex] = (m[c.stopIndex] || 0) + 1
+    return m
+  }, [checkins])
 
   // ---------- ยังไม่เข้าห้อง ----------
   if (!roomCode) {
@@ -311,6 +331,26 @@ export default function GroupPanel({
         🆘 ขอความช่วยเหลือ (SOS)
       </button>
 
+      {/* เช็คอินจุดแวะ */}
+      {Object.keys(checkins).length > 0 && waypoints.length > 0 && (
+        <div className="card p-3">
+          <div className="label mb-2">✅ เช็คอินจุดแวะ (ถึงจุดนัดกี่คัน)</div>
+          <ul className="flex flex-col gap-1">
+            {waypoints.map((w, i) =>
+              checkinByStop[i] ? (
+                <li key={i} className="flex items-center justify-between text-sm">
+                  <span className="truncate mr-2">
+                    <span className="text-dim mr-1.5">{i + 1}.</span>
+                    {w.name}
+                  </span>
+                  <span className="font-semibold text-green-300 shrink-0">✅ {checkinByStop[i]} คัน</span>
+                </li>
+              ) : null
+            )}
+          </ul>
+        </div>
+      )}
+
       {/* รายชื่อไรเดอร์ */}
       <div>
         <div className="label mb-2 px-1">ไรเดอร์ในห้อง ({roster.length})</div>
@@ -325,18 +365,26 @@ export default function GroupPanel({
               const stale = ago != null && ago > 20
               const dist =
                 !me && positioned && myPos ? haversine(myPos, { lat: r.lat!, lng: r.lng! }) : null
+              const prog = convoy[r.id]
+              const co = checkins[r.id]
               return (
                 <li key={r.id} className="card-2 flex items-center gap-3 p-2.5">
                   <button
                     onClick={() => positioned && onFocusRider(r)}
                     disabled={!positioned}
-                    className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-base border-2 border-white/80 shadow disabled:opacity-40"
+                    className="relative w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-base border-2 border-white/80 shadow disabled:opacity-40"
                     style={{ background: r.color }}
                   >
                     {r.emoji}
+                    {prog && (
+                      <span className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold grid place-items-center border border-white/40">
+                        {prog.order}
+                      </span>
+                    )}
                   </button>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
+                      {prog?.order === 1 && positioned && <span className="mr-1">🏁</span>}
                       {r.name || 'ไรเดอร์'} {me && <span className="text-brand">(ฉัน)</span>}
                     </div>
                     <div className="text-xs text-dim">
@@ -358,6 +406,21 @@ export default function GroupPanel({
                       )}
                       {r.speed != null && r.speed > 0.5 && ` · ${Math.round(r.speed * 3.6)} กม./ชม.`}
                     </div>
+                    {/* ETA / ลำดับขบวน / เช็คอิน */}
+                    {positioned && prog && (
+                      <div className="text-[11px] text-brand mt-0.5">
+                        {co ? (
+                          <span className="text-green-300">✅ ถึง {waypoints[co.stopIndex]?.name || `จุด ${co.stopIndex + 1}`}</span>
+                        ) : prog.distToNext != null && prog.nextStopName ? (
+                          <>
+                            → เหลือ {formatDistance(prog.distToNext)} ถึง {prog.nextStopName}
+                            {r.speed != null && r.speed > 1.5 && ` · ~${Math.max(1, Math.round(prog.distToNext / r.speed / 60))} นาที`}
+                          </>
+                        ) : (
+                          <span className="text-green-300">🏁 ถึงปลายทางแล้ว</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {!me && positioned && (
                     <button

@@ -30,6 +30,7 @@ import {
 } from './lib/storage'
 import { decodeTripFromUrl, encodeTripToUrl, shareUrl } from './lib/share'
 import { makeAdminKey } from './lib/group'
+import { computeConvoy } from './lib/convoy'
 import { formatDistance, formatDuration, haversine, uid } from './lib/format'
 import { useDebounced } from './hooks/useDebounced'
 
@@ -122,6 +123,13 @@ export default function App() {
   const [followId, setFollowId] = useState<string | null>(null)
   const lastMsgTs = useRef(0)
   const lastSosTs = useRef(0)
+  const checkedRef = useRef<Set<number>>(new Set())
+
+  // ความคืบหน้า/ลำดับขบวนของไรเดอร์ (คำนวณ client-side จากเส้นทาง + ตำแหน่งสด)
+  const convoy = useMemo(
+    () => computeConvoy(group.positioned, route?.coordinates ?? [], waypoints.map((w) => ({ name: w.name, lat: w.lat, lng: w.lng }))),
+    [group.positioned, route, waypoints]
+  )
 
   // แก้ไขแผนได้เมื่อ: วางแผนคนเดียว (ไม่อยู่ในห้อง) หรือเป็นแอดมินของห้อง
   const canEdit = !group.inRoom || group.isAdmin
@@ -131,8 +139,11 @@ export default function App() {
   // emoji อากาศเรียงตาม waypoints (ไว้โชว์บนหมุดแผนที่)
   const weatherEmojis = useMemo(() => weather.map((w) => (w.available ? w.emoji : undefined)), [weather])
 
-  // กรอง POI ที่แสดงตามหมวดที่เลือก (สลับ chip แล้วซ่อน/โชว์ทันทีไม่ต้องค้นใหม่)
-  const visiblePois = useMemo(() => pois.filter((p) => kinds.has(p.kind)), [pois, kinds])
+  // สมาชิกเห็นร้านที่แอดมินแชร์ (ไม่เรียก Overpass เอง) · แอดมิน/เดี่ยวใช้ผลค้นหาตัวเอง
+  const visiblePois = useMemo(() => {
+    const src = group.inRoom && !group.isAdmin ? group.sharedPois : pois
+    return src.filter((p) => kinds.has(p.kind))
+  }, [pois, group.sharedPois, group.inRoom, group.isAdmin, kinds])
 
   const toggleKind = (k: PoiKind) =>
     setKinds((prev) => {
@@ -435,6 +446,20 @@ export default function App() {
     setTab('group')
   }, [group.sos, group.myId, notify])
 
+  // เช็คอินอัตโนมัติเมื่อเข้าใกล้จุดแวะ ~150 ม. (ตอนแชร์ตำแหน่ง)
+  useEffect(() => {
+    if (!group.inRoom || !group.sharing || !group.myPos) return
+    waypoints.forEach((w, i) => {
+      if (checkedRef.current.has(i)) return
+      if (haversine(group.myPos!, { lat: w.lat, lng: w.lng }) < 150) {
+        checkedRef.current.add(i)
+        group.checkin(i)
+        notify(`✅ เช็คอิน “${w.name}” แล้ว`)
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.myPos, group.inRoom, group.sharing, waypoints])
+
   const removePlace = (key: string) => setSavedPlaces(deletePlace(key))
 
   const searchPois = async () => {
@@ -453,6 +478,8 @@ export default function App() {
     try {
       const found = await fetchPois(coords, Array.from(kinds), 3000, ac.signal)
       setPois(found)
+      // แอดมินแชร์ให้สมาชิกอัตโนมัติ (สมาชิกไม่ต้องเรียก Overpass เอง)
+      if (group.isAdmin && group.inRoom) group.sharePois(found)
       notify(found.length ? `พบ ${found.length} จุดตามเส้นทาง` : 'ไม่พบจุดในรัศมี 3 กม.')
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setPoiError('ดึงข้อมูลร้านไม่สำเร็จ ลองใหม่อีกครั้ง')
@@ -726,6 +753,9 @@ export default function App() {
                 followId={followId}
                 isAdmin={group.isAdmin}
                 inRoom={group.inRoom}
+                convoy={convoy}
+                checkins={group.checkins}
+                waypoints={waypoints}
                 onJoin={(code, prof, isCreate) => {
                   let key = loadAdminKey(code)
                   if (isCreate) {
@@ -737,6 +767,7 @@ export default function App() {
                 }}
                 onLeave={() => {
                   setFollowId(null)
+                  checkedRef.current.clear()
                   group.leave()
                 }}
                 onToggleShare={group.setSharing}
