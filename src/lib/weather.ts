@@ -1,3 +1,5 @@
+import { haversine } from './format'
+
 const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast'
 
 export interface WeatherPoint {
@@ -32,6 +34,97 @@ function wmo(code: number): [string, string] {
 
 function toISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function toISOHour(d: Date): string {
+  return `${toISODate(d)}T${String(d.getHours()).padStart(2, '0')}:00`
+}
+
+export interface RouteWeatherPoint {
+  km: number
+  time: string // HH:MM ที่คาดว่าจะถึง
+  emoji: string
+  label: string
+  rainProb?: number
+  temp?: number
+}
+
+/**
+ * พยากรณ์อากาศ "ตามเส้นทาง + เวลา" — สุ่มจุดตามเส้น, คำนวณเวลาที่จะถึงแต่ละจุด (จากเวลาออก+ความเร็วเฉลี่ย)
+ * แล้วดึงอากาศ "รายชั่วโมง" ของชั่วโมงนั้น ๆ (Open-Meteo ฟรี) → รู้ว่าฝนจะตกช่วง กม.ไหน เวลาไหน
+ */
+export async function fetchRouteWeather(
+  coords: [number, number][],
+  totalDistanceM: number,
+  durationS: number,
+  departHHMM: string,
+  tripDate: string,
+  signal?: AbortSignal
+): Promise<RouteWeatherPoint[]> {
+  if (coords.length < 2 || totalDistanceM <= 0) return []
+
+  // ระยะสะสม
+  const cum = [0]
+  for (let i = 1; i < coords.length; i++) {
+    cum.push(cum[i - 1] + haversine({ lat: coords[i - 1][0], lng: coords[i - 1][1] }, { lat: coords[i][0], lng: coords[i][1] }))
+  }
+  const total = cum[cum.length - 1] || totalDistanceM
+
+  // วันฐาน: วันทริป (ถ้าตั้ง & อยู่ในช่วง 16 วัน) ไม่งั้นวันนี้
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const maxAhead = new Date(today)
+  maxAhead.setDate(today.getDate() + 15)
+  const t = tripDate ? new Date(tripDate + 'T00:00:00') : null
+  const base = t && !isNaN(+t) && t >= today && t <= maxAhead ? new Date(t) : new Date(today)
+  const [dh, dm] = (departHHMM || '07:00').split(':').map(Number)
+  const departMs = base.getTime() + ((dh || 0) * 60 + (dm || 0)) * 60000
+  const durBuffered = durationS * 1.2
+
+  // สุ่ม 6 จุดตามระยะ + เวลาที่จะถึง
+  const N = 6
+  const samples: { lat: number; lng: number; km: number; arrive: Date }[] = []
+  for (let k = 0; k < N; k++) {
+    const targetD = (k / (N - 1)) * total
+    let i = 1
+    while (i < cum.length && cum[i] < targetD) i++
+    const c = coords[Math.min(i, coords.length - 1)]
+    const arrive = new Date(departMs + (targetD / total) * durBuffered * 1000)
+    samples.push({ lat: c[0], lng: c[1], km: targetD / 1000, arrive })
+  }
+
+  const startDate = toISODate(samples[0].arrive)
+  const endDate = toISODate(samples[samples.length - 1].arrive)
+  const params = new URLSearchParams({
+    latitude: samples.map((s) => s.lat.toFixed(4)).join(','),
+    longitude: samples.map((s) => s.lng.toFixed(4)).join(','),
+    hourly: 'weathercode,precipitation_probability,temperature_2m',
+    timezone: 'Asia/Bangkok',
+    start_date: startDate,
+    end_date: endDate,
+  })
+
+  const res = await fetch(`${OPEN_METEO}?${params}`, { signal })
+  if (!res.ok) throw new Error(`ดึงพยากรณ์ตามเส้นทางไม่สำเร็จ (${res.status})`)
+  const data = await res.json()
+  const arr = Array.isArray(data) ? data : [data]
+
+  return samples.map((s, i): RouteWeatherPoint => {
+    const h = arr[i]?.hourly
+    const hh = `${String(s.arrive.getHours()).padStart(2, '0')}:${String(s.arrive.getMinutes()).padStart(2, '0')}`
+    if (!h || !h.time) return { km: s.km, time: hh, emoji: '❓', label: '—' }
+    const idx = h.time.indexOf(toISOHour(s.arrive))
+    const j = idx >= 0 ? idx : 0
+    const [emoji, label] = wmo(h.weathercode?.[j] ?? 3)
+    return {
+      km: s.km,
+      time: hh,
+      emoji,
+      label,
+      rainProb: h.precipitation_probability?.[j] ?? undefined,
+      temp: h.temperature_2m?.[j] ?? undefined,
+    }
+  })
 }
 
 /**

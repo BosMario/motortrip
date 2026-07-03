@@ -8,6 +8,7 @@ import PoiList from './components/PoiList'
 import SavedPlaces from './components/SavedPlaces'
 import GroupPanel from './components/GroupPanel'
 import WeatherPanel from './components/WeatherPanel'
+import WeatherRoute from './components/WeatherRoute'
 import TripEstimate from './components/TripEstimate'
 import ElevationProfile from './components/ElevationProfile'
 import SyncPanel from './components/SyncPanel'
@@ -776,6 +777,9 @@ export default function App() {
                 </div>
                 <WeatherPanel points={weather} loading={weatherLoading} error={weatherError} usedToday={weatherUsedToday} hasWaypoints={waypoints.length > 0} onFetch={fetchWeather} />
                 <TripEstimate route={route} waypoints={waypoints} roundTrip={roundTrip} />
+                {route && (
+                  <WeatherRoute coords={route.coordinates} distanceM={route.distance} durationS={route.duration} tripDate={date} />
+                )}
                 <ElevationProfile routeCoords={route?.coordinates ?? []} />
                 <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
                 <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
