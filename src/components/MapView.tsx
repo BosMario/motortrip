@@ -104,18 +104,18 @@ function FocusController({ focus }: { focus: Props['focus'] }) {
   return null
 }
 
-/** ให้แผนที่คำนวณขนาดใหม่เมื่อจอเปลี่ยน (iOS toolbar ยืด-หด / rotate) */
+/** ให้แผนที่เต็ม container เสมอ — ResizeObserver จับทุกครั้งที่พื้นที่เปลี่ยน + เผื่อ layout ยังไม่นิ่งตอน mount */
 function ResizeHandler() {
   const map = useMap()
   useEffect(() => {
     const fix = () => map.invalidateSize()
-    fix()
-    const t = setTimeout(fix, 300) // เผื่อ layout ยังไม่นิ่งตอน mount
-    window.addEventListener('resize', fix)
+    const ro = new ResizeObserver(fix)
+    ro.observe(map.getContainer())
+    const timers = [50, 200, 500, 1000].map((t) => setTimeout(fix, t))
     window.addEventListener('orientationchange', fix)
     return () => {
-      clearTimeout(t)
-      window.removeEventListener('resize', fix)
+      ro.disconnect()
+      timers.forEach(clearTimeout)
       window.removeEventListener('orientationchange', fix)
     }
   }, [map])

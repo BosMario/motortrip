@@ -514,7 +514,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-ink-950">
+    <div className="app-shell flex flex-col overflow-hidden bg-ink-950">
       {/* ===== Header: โลโก้ + สถิติเส้นทาง ===== */}
       <header className="shrink-0 pt-safe px-3.5 pb-2 z-[1002] border-b border-white/[0.06] bg-black/50 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 pt-1.5">

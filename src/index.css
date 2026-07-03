@@ -37,6 +37,12 @@ body {
     #08080a;
 }
 
+/* เต็มจอจริง: 100vh เป็น fallback แล้ว 100dvh override (iOS ยืด-หด) */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
 /* prevent iOS input zoom */
 input,
 select,
