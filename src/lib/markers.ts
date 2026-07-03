@@ -48,10 +48,10 @@ export function waypointIcon(index: number, total: number, custom = false, weath
   })
 }
 
-/** หมุด POI: คาเฟ่ = ส้ม, ร้านอาหาร = เขียว, ปั๊ม = น้ำเงิน */
+/** หมุด POI: คาเฟ่ = ส้ม, ร้านอาหาร = เขียว, ปั๊ม = น้ำเงิน, ชาร์จ EV = เขียวมิ้นต์ */
 export function poiIcon(kind: PoiKind): L.DivIcon {
-  const bg = kind === 'cafe' ? '#f59e0b' : kind === 'fuel' ? '#2563eb' : '#16a34a'
-  const emoji = kind === 'cafe' ? '☕' : kind === 'fuel' ? '⛽' : '🍜'
+  const bg = kind === 'cafe' ? '#f59e0b' : kind === 'fuel' ? '#2563eb' : kind === 'charging' ? '#14b8a6' : '#16a34a'
+  const emoji = kind === 'cafe' ? '☕' : kind === 'fuel' ? '⛽' : kind === 'charging' ? '⚡' : '🍜'
   return L.divIcon({
     className: 'moto-marker',
     html: `<div style="

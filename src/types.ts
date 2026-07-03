@@ -8,7 +8,7 @@ export interface Waypoint {
   note?: string
 }
 
-export type PoiKind = 'cafe' | 'restaurant' | 'fuel'
+export type PoiKind = 'cafe' | 'restaurant' | 'fuel' | 'charging'
 
 export interface Poi {
   id: string

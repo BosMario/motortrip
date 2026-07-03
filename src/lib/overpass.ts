@@ -93,6 +93,7 @@ const AMENITY: Record<PoiKind, string> = {
   cafe: 'cafe',
   restaurant: 'restaurant',
   fuel: 'fuel',
+  charging: 'charging_station',
 }
 
 /**
@@ -134,9 +135,22 @@ export async function fetchPois(
   for (const el of data.elements || []) {
     if (el.lat == null || el.lon == null) continue
     const t = el.tags || {}
-    const kind: PoiKind = t.amenity === 'cafe' ? 'cafe' : t.amenity === 'fuel' ? 'fuel' : 'restaurant'
+    const kind: PoiKind =
+      t.amenity === 'cafe'
+        ? 'cafe'
+        : t.amenity === 'fuel'
+          ? 'fuel'
+          : t.amenity === 'charging_station'
+            ? 'charging'
+            : 'restaurant'
     const fallbackName =
-      kind === 'cafe' ? 'คาเฟ่ (ไม่ระบุชื่อ)' : kind === 'fuel' ? 'ปั๊มน้ำมัน (ไม่ระบุชื่อ)' : 'ร้านอาหาร (ไม่ระบุชื่อ)'
+      kind === 'cafe'
+        ? 'คาเฟ่ (ไม่ระบุชื่อ)'
+        : kind === 'fuel'
+          ? 'ปั๊มน้ำมัน (ไม่ระบุชื่อ)'
+          : kind === 'charging'
+            ? 'สถานีชาร์จ EV (ไม่ระบุชื่อ)'
+            : 'ร้านอาหาร (ไม่ระบุชื่อ)'
     // ปั๊มมักมีแบรนด์ชัด (ปตท./เชลล์/บางจาก) — ใช้ brand เป็นชื่อสำรอง
     const name = t.name || t['name:th'] || t['name:en'] || t.brand || fallbackName
     const key = `${name}|${el.lat.toFixed(4)}|${el.lon.toFixed(4)}`

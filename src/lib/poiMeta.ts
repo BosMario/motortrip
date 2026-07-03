@@ -28,4 +28,10 @@ export const KIND_META: Record<PoiKind, KindMeta> = {
     badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     gradient: 'bg-gradient-to-br from-sky-400 to-blue-600',
   },
+  charging: {
+    emoji: '⚡',
+    label: 'ชาร์จ EV',
+    badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+    gradient: 'bg-gradient-to-br from-teal-300 to-emerald-500',
+  },
 }

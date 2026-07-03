@@ -74,7 +74,7 @@ const DEFAULT_START: Omit<Waypoint, 'id'> = {
 }
 const makeDefaultStart = (): Waypoint => ({ ...DEFAULT_START, id: uid() })
 
-const ALL_KINDS: PoiKind[] = ['fuel', 'cafe', 'restaurant']
+const ALL_KINDS: PoiKind[] = ['fuel', 'charging', 'cafe', 'restaurant']
 
 export default function App() {
   const [name, setName] = useState('ทริปใหม่')
@@ -518,9 +518,7 @@ export default function App() {
         <div className="flex items-center justify-between gap-2 pt-1.5">
           <div className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
-            <span className="font-bold text-sm tracking-tight leading-none">
-              Mototrip <span className="text-brand font-semibold text-xs">by saktech</span>
-            </span>
+            <span className="font-bold text-sm tracking-tight">SAKTECH<span className="text-brand">TRIP</span></span>
           </div>
           {route ? (
             <div className="flex items-center gap-2 text-xs">
@@ -658,8 +656,8 @@ export default function App() {
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-dim">
-                        ⛽ {visiblePois.filter((p) => p.kind === 'fuel').length} · ☕ {visiblePois.filter((p) => p.kind === 'cafe').length} · 🍜{' '}
-                        {visiblePois.filter((p) => p.kind === 'restaurant').length} · เรียงตามนิยม
+                        ⛽ {visiblePois.filter((p) => p.kind === 'fuel').length} · ⚡ {visiblePois.filter((p) => p.kind === 'charging').length} · ☕{' '}
+                        {visiblePois.filter((p) => p.kind === 'cafe').length} · 🍜 {visiblePois.filter((p) => p.kind === 'restaurant').length}
                       </span>
                       <button onClick={() => setPois([])} className="text-xs text-[#ff6a5f]">
                         ล้าง
