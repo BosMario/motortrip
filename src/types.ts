@@ -38,11 +38,17 @@ export interface SavedPlace extends Poi {
   savedAt: number
 }
 
-/** เส้นทางที่แชร์เข้าห้องกลุ่ม */
+/** เส้นทางที่แอดมินแชร์เข้าห้องกลุ่ม (สมาชิก render โดยไม่ต้องเรียก OSRM เอง) */
 export interface SharedRoute {
   name: string
   waypoints: { name: string; lat: number; lng: number }[]
+  /** เส้น polyline ที่แอดมินคำนวณไว้แล้ว [lat,lng][] */
+  geometry?: [number, number][]
+  distance?: number
+  duration?: number
 }
+
+export type GroupRole = 'admin' | 'member'
 
 /** ข้อความด่วนในกลุ่ม */
 export interface GroupMessage {

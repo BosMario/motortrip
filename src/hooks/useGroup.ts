@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { GroupMessage, Rider, RiderProfile, SharedRoute, SosAlert } from '../types'
+import type { GroupMessage, GroupRole, Rider, RiderProfile, SharedRoute, SosAlert } from '../types'
 import { GroupClient } from '../lib/group'
 import { useWakeLock } from './useWakeLock'
 
@@ -35,6 +35,7 @@ export function useGroup() {
   const [sharedRoute, setSharedRoute] = useState<SharedRoute | null>(null)
   const [messages, setMessages] = useState<GroupMessage[]>([])
   const [sos, setSos] = useState<SosAlert | null>(null)
+  const [role, setRole] = useState<GroupRole | null>(null)
 
   const [blocked, setBlocked] = useState<{ reason: string; ts: number } | null>(null)
 
@@ -48,7 +49,7 @@ export function useGroup() {
     setRidersMap((prev) => ({ ...prev, [r.id]: { ...prev[r.id], ...r } as Rider }))
   }, [])
 
-  const join = useCallback((code: string, profile: RiderProfile) => {
+  const join = useCallback((code: string, profile: RiderProfile, adminKey?: string) => {
     clientRef.current?.close()
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
     setError('')
@@ -58,23 +59,28 @@ export function useGroup() {
     setMessages([])
     setSos(null)
     setBlocked(null)
+    setRole(null)
     msgTimes.current = []
     sosTs.current = 0
     setRoomCode(code)
 
-    const client = new GroupClient(code, profile, {
-      onStatus: setConnected,
-      onMessage: (msg) => {
-        switch (msg.type) {
-          case 'snapshot':
-            setMyId(msg.you)
-            setRidersMap(() => {
-              const m: Record<string, Rider> = {}
-              for (const r of msg.riders || []) if (r?.id) m[r.id] = r
-              return m
-            })
-            if (msg.route) setSharedRoute(msg.route)
-            break
+    const client = new GroupClient(
+      code,
+      profile,
+      {
+        onStatus: setConnected,
+        onMessage: (msg) => {
+          switch (msg.type) {
+            case 'snapshot':
+              setMyId(msg.you)
+              setRole(msg.role === 'admin' ? 'admin' : 'member')
+              setRidersMap(() => {
+                const m: Record<string, Rider> = {}
+                for (const r of msg.riders || []) if (r?.id) m[r.id] = r
+                return m
+              })
+              if (msg.route) setSharedRoute(msg.route)
+              break
           case 'join':
             if (msg.rider?.id) upsert(msg.rider)
             break
@@ -96,12 +102,17 @@ export function useGroup() {
           case 'sos':
             setSos(msg as SosAlert)
             break
-          case 'blocked':
-            setBlocked({ reason: msg.reason || 'flood', ts: Date.now() })
-            break
-        }
+            case 'forbidden':
+              setBlocked({ reason: msg.reason || 'admin-only', ts: Date.now() })
+              break
+            case 'blocked':
+              setBlocked({ reason: msg.reason || 'flood', ts: Date.now() })
+              break
+          }
+        },
       },
-    })
+      adminKey
+    )
     clientRef.current = client
     client.connect()
   }, [upsert])
@@ -115,6 +126,8 @@ export function useGroup() {
     setRidersMap({})
     setMyId(null)
     setMyPos(null)
+    setRole(null)
+    setSharedRoute(null)
   }, [])
 
   const updateProfile = useCallback((profile: RiderProfile) => {
@@ -217,6 +230,9 @@ export function useGroup() {
     messages,
     sos,
     blocked,
+    role,
+    isAdmin: role === 'admin',
+    inRoom: !!roomCode,
     join,
     leave,
     updateProfile,

@@ -24,7 +24,7 @@ const TripSummary = forwardRef<HTMLDivElement, Props>(({ name, date, waypoints, 
       <div className="h-1" style={{ background: 'linear-gradient(90deg,#ff7a45,#ff2d55)' }} />
 
       <div className="px-4 pt-4 pb-3">
-        <div className="text-[10px] font-bold uppercase tracking-label text-brand">🏍️ MOTO TRIP</div>
+        <div className="text-[10px] font-bold uppercase tracking-label text-brand">🏍️ MOTOTRIP · BY SAKTECH</div>
         <h2 className="text-xl font-bold leading-tight mt-1 tracking-tight">{name || 'ทริปไม่มีชื่อ'}</h2>
         {date && <div className="text-sm text-dim mt-0.5">📅 {formatThaiDate(date)}</div>}
       </div>

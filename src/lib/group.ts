@@ -9,6 +9,13 @@ export function roomWsUrl(code: string): string {
   return `${proto}://${location.host}/api/room/${code}/ws`
 }
 
+/** สุ่ม admin key ลับ (สิทธิ์เจ้าของห้อง) */
+export function makeAdminKey(): string {
+  const a = new Uint8Array(16)
+  crypto.getRandomValues(a)
+  return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 /** สุ่มรหัสห้อง 6 ตัว (ตัวอักษร/เลขที่อ่านง่าย ไม่ปน 0/O/1/I) */
 export function makeRoomCode(seed: number): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -31,6 +38,7 @@ export class GroupClient {
   private ws: WebSocket | null = null
   private code: string
   private profile: RiderProfile
+  private adminKey?: string
   private onMsg: Handler
   private onStatus: (connected: boolean) => void
   private closedByUser = false
@@ -40,10 +48,12 @@ export class GroupClient {
   constructor(
     code: string,
     profile: RiderProfile,
-    handlers: { onMessage: Handler; onStatus: (connected: boolean) => void }
+    handlers: { onMessage: Handler; onStatus: (connected: boolean) => void },
+    adminKey?: string
   ) {
     this.code = code
     this.profile = profile
+    this.adminKey = adminKey
     this.onMsg = handlers.onMessage
     this.onStatus = handlers.onStatus
   }
@@ -63,7 +73,7 @@ export class GroupClient {
     this.ws.onopen = () => {
       this.retry = 0
       this.onStatus(true)
-      this.send({ type: 'join', ...this.profile })
+      this.send({ type: 'join', ...this.profile, adminKey: this.adminKey })
     }
     this.ws.onmessage = (e) => {
       try {
@@ -94,7 +104,7 @@ export class GroupClient {
 
   updateProfile(profile: RiderProfile) {
     this.profile = profile
-    this.send({ type: 'join', ...profile })
+    this.send({ type: 'join', ...profile, adminKey: this.adminKey })
   }
 
   sendPos(pos: { lat: number; lng: number; heading?: number | null; speed?: number | null; ts: number }) {

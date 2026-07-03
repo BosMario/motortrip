@@ -1,6 +1,6 @@
 {
-  "name": "Moto Trip Planner",
-  "short_name": "Moto Trip",
+  "name": "Mototrip by saktech",
+  "short_name": "Mototrip",
   "description": "วางแผนทริปมอเตอร์ไซค์ เส้นทาง จุดแวะ ร้านกาแฟ/อาหาร แชร์ทริปได้ทันที",
   "start_url": "/",
   "scope": "/",

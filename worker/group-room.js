@@ -5,9 +5,9 @@
  *
  * โปรโตคอลข้อความ (JSON):
  *   client -> server:
- *     { type:'join', name, color, emoji }
+ *     { type:'join', name, color, emoji, adminKey? }   // adminKey ลับ = สิทธิ์แอดมิน
  *     { type:'pos', lat, lng, heading?, speed?, ts }
- *     { type:'route', route:{ name, waypoints:[{name,lat,lng},...] } }  // แชร์เส้นทางเข้าห้อง
+ *     { type:'route', route:{ name, waypoints, geometry?, distance?, duration? } }  // เฉพาะแอดมิน
  *     { type:'msg', text, emoji }                                        // ข้อความด่วน
  *     { type:'sos' }                                                     // ขอความช่วยเหลือ
  *     { type:'leave' }
@@ -67,6 +67,19 @@ export class GroupRoom {
       att.name = String(data.name || 'ไรเดอร์').slice(0, 24)
       att.color = typeof data.color === 'string' ? data.color.slice(0, 16) : '#ea580c'
       att.emoji = typeof data.emoji === 'string' ? data.emoji.slice(0, 8) : '🏍️'
+
+      // สิทธิ์แอดมิน: คนแรกที่ส่ง adminKey มา = เจ้าของห้อง, ต่อไปต้องคีย์ตรงเท่านั้น
+      const provided = typeof data.adminKey === 'string' ? data.adminKey.slice(0, 64) : null
+      let stored = await this.state.storage.get('adminKey')
+      if (provided) {
+        if (!stored) {
+          stored = provided
+          await this.state.storage.put('adminKey', stored)
+        }
+        att.admin = provided === stored
+      } else {
+        att.admin = false
+      }
       ws.serializeAttachment(att)
 
       // snapshot ของไรเดอร์คนอื่นที่มีตำแหน่งแล้ว + เส้นทางที่แชร์ไว้ในห้อง
@@ -77,7 +90,16 @@ export class GroupRoom {
         if (a && a.id) riders.push(a)
       }
       const route = await this.state.storage.get('route')
-      ws.send(JSON.stringify({ type: 'snapshot', you: att.id, riders, route: route || null }))
+      ws.send(
+        JSON.stringify({
+          type: 'snapshot',
+          you: att.id,
+          role: att.admin ? 'admin' : 'member',
+          hasAdmin: !!stored,
+          riders,
+          route: route || null,
+        })
+      )
       this.broadcast({ type: 'join', rider: att }, ws)
       return
     }
@@ -108,7 +130,15 @@ export class GroupRoom {
     }
 
     if (data.type === 'route') {
-      // จำกัดขนาด: ชื่อ + จุดแวะ (กันข้อมูลใหญ่เกิน)
+      // เฉพาะแอดมินเท่านั้นที่วางแผน/แชร์เส้นทางได้
+      if (!att.admin) {
+        try {
+          ws.send(JSON.stringify({ type: 'forbidden', reason: 'admin-only' }))
+        } catch {
+          /* noop */
+        }
+        return
+      }
       const r = data.route || {}
       const route = {
         name: String(r.name || 'เส้นทางกลุ่ม').slice(0, 60),
@@ -119,9 +149,15 @@ export class GroupRoom {
               lng: Number(w.lng),
             }))
           : [],
+        // เส้น polyline ที่แอดมินคำนวณแล้ว → สมาชิกใช้เลย ไม่ต้องเรียก OSRM
+        geometry: Array.isArray(r.geometry)
+          ? r.geometry.slice(0, 3000).map((p) => [Number(p[0]?.toFixed ? p[0].toFixed(5) : p[0]), Number(p[1]?.toFixed ? p[1].toFixed(5) : p[1])])
+          : undefined,
+        distance: Number(r.distance) || 0,
+        duration: Number(r.duration) || 0,
       }
       await this.state.storage.put('route', route)
-      this.broadcast({ type: 'route', route, setBy: att.name }) // ส่งให้ทุกคนรวมคนแชร์
+      this.broadcast({ type: 'route', route, setBy: att.name }) // ส่งให้ทุกคนรวมแอดมิน
       return
     }
 

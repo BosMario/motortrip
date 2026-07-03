@@ -36,13 +36,14 @@ interface Props {
   sharedRoute: SharedRoute | null
   messages: GroupMessage[]
   followId: string | null
-  onJoin: (code: string, profile: RiderProfile) => void
+  isAdmin: boolean
+  inRoom: boolean
+  onJoin: (code: string, profile: RiderProfile, isCreate: boolean) => void
   onLeave: () => void
   onToggleShare: (on: boolean) => void
   onFocusRider: (r: Rider) => void
   onNotify: (msg: string) => void
   onShareRoute: () => void
-  onUseRoute: () => void
   onSendMessage: (text: string, emoji: string) => void
   onSOS: () => void
   onToggleFollow: (id: string) => void
@@ -64,13 +65,13 @@ export default function GroupPanel({
   sharedRoute,
   messages,
   followId,
+  isAdmin,
   onJoin,
   onLeave,
   onToggleShare,
   onFocusRider,
   onNotify,
   onShareRoute,
-  onUseRoute,
   onSendMessage,
   onSOS,
   onToggleFollow,
@@ -89,10 +90,10 @@ export default function GroupPanel({
     return () => clearInterval(t)
   }, [roomCode])
 
-  const join = (c: string) => {
+  const join = (c: string, isCreate = false) => {
     const clean = c.trim().toUpperCase()
     if (clean.length < 4) return onNotify('ใส่รหัสห้องอย่างน้อย 4 ตัว')
-    onJoin(clean, { name: name.trim() || 'ไรเดอร์', emoji, color })
+    onJoin(clean, { name: name.trim() || 'ไรเดอร์', emoji, color }, isCreate)
   }
 
   const shareLink = () => {
@@ -174,13 +175,16 @@ export default function GroupPanel({
               maxLength={12}
               className="field flex-1 px-3 py-2.5 text-sm tracking-widest font-mono uppercase"
             />
-            <button onClick={() => join(code)} className="btn btn-ghost px-4 text-sm whitespace-nowrap">
+            <button onClick={() => join(code, false)} className="btn btn-ghost px-4 text-sm whitespace-nowrap">
               เข้าห้อง
             </button>
           </div>
-          <button onClick={() => join(makeRoomCode(Date.now()))} className="btn btn-primary w-full py-3 text-sm">
-            ✨ สร้างห้องใหม่
+          <button onClick={() => join(makeRoomCode(Date.now()), true)} className="btn btn-primary w-full py-3 text-sm">
+            ✨ สร้างห้องใหม่ (คุณเป็นแอดมิน 👑)
           </button>
+          <p className="text-[11px] text-dim text-center leading-relaxed">
+            👑 <b>แอดมิน</b> (คนสร้างห้อง) วางแผนได้ · 👀 <b>สมาชิก</b> (เข้าผ่านลิงก์) ดูแผนอย่างเดียว
+          </p>
         </div>
       </div>
     )
@@ -228,29 +232,36 @@ export default function GroupPanel({
       )}
       {error && <p className="text-xs text-[#ff6a5f] bg-[#ff3b30]/10 border border-[#ff3b30]/25 rounded-lg px-3 py-2">⚠️ {error}</p>}
 
+      {/* ป้ายบทบาท */}
+      <div
+        className={`rounded-xl px-3 py-2 text-sm font-medium border ${
+          isAdmin ? 'bg-brand/10 border-brand/40 text-brand' : 'bg-white/[0.04] border-white/10 text-white/90'
+        }`}
+      >
+        {isAdmin ? '👑 คุณเป็นแอดมิน — วางแผนทริปให้ทีมได้' : '👀 โหมดดู — ทำตามแผนที่แอดมินวางไว้'}
+      </div>
+
       {/* เส้นทางกลุ่ม */}
       <div className="card p-3 flex flex-col gap-2">
         <div className="label">เส้นทางกลุ่ม</div>
         {sharedRoute ? (
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">🗺️ {sharedRoute.name}</div>
-              <div className="text-xs text-dim">{sharedRoute.waypoints.length} จุดแวะ</div>
-            </div>
-            <button onClick={onUseRoute} className="btn btn-ghost text-xs px-3 py-2 whitespace-nowrap">
-              ใช้เส้นทางนี้
-            </button>
+          <div className="text-sm">
+            🗺️ <b>{sharedRoute.name}</b> · {sharedRoute.waypoints.length} จุดแวะ
           </div>
         ) : (
-          <div className="text-xs text-dim">ยังไม่มีใครแชร์เส้นทาง</div>
+          <div className="text-xs text-dim">
+            {isAdmin ? 'วางแผนในแท็บ “แผนที่/จุดแวะ” แล้วระบบจะ sync ให้ทีมอัตโนมัติ' : 'รอแอดมินวางแผน…'}
+          </div>
         )}
-        <button
-          onClick={onShareRoute}
-          disabled={waypointCount < 2}
-          className="btn btn-ghost w-full py-2 text-xs disabled:opacity-40"
-        >
-          📤 แชร์เส้นทางของฉันให้กลุ่ม{waypointCount >= 2 ? ` (${waypointCount} จุด)` : ' (ต้องมี ≥2 จุด)'}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={onShareRoute}
+            disabled={waypointCount < 2}
+            className="btn btn-ghost w-full py-2 text-xs disabled:opacity-40"
+          >
+            📤 อัปเดตแผนให้ทีมทันที{waypointCount >= 2 ? '' : ' (ต้องมี ≥2 จุด)'}
+          </button>
+        )}
       </div>
 
       {/* ข้อความด่วน */}

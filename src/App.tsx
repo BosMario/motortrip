@@ -27,8 +27,28 @@ import {
   upsertTrip,
 } from './lib/storage'
 import { decodeTripFromUrl, encodeTripToUrl, shareUrl } from './lib/share'
+import { makeAdminKey } from './lib/group'
 import { formatDistance, formatDuration, haversine, uid } from './lib/format'
 import { useDebounced } from './hooks/useDebounced'
+
+/** เก็บ admin key ต่อห้อง (สิทธิ์เจ้าของห้อง) ใน localStorage */
+const ADMIN_KEYS = 'moto-admin-keys-v1'
+function loadAdminKey(code: string): string | undefined {
+  try {
+    return JSON.parse(localStorage.getItem(ADMIN_KEYS) || '{}')[code]
+  } catch {
+    return undefined
+  }
+}
+function saveAdminKey(code: string, key: string): void {
+  try {
+    const m = JSON.parse(localStorage.getItem(ADMIN_KEYS) || '{}')
+    m[code] = key
+    localStorage.setItem(ADMIN_KEYS, JSON.stringify(m))
+  } catch {
+    /* noop */
+  }
+}
 
 type Tab = 'map' | 'stops' | 'places' | 'summary' | 'group'
 
@@ -101,6 +121,9 @@ export default function App() {
   const lastMsgTs = useRef(0)
   const lastSosTs = useRef(0)
 
+  // แก้ไขแผนได้เมื่อ: วางแผนคนเดียว (ไม่อยู่ในห้อง) หรือเป็นแอดมินของห้อง
+  const canEdit = !group.inRoom || group.isAdmin
+
   const savedKeys = useMemo(() => new Set(savedPlaces.map((p) => placeKey(p))), [savedPlaces])
 
   // emoji อากาศเรียงตาม waypoints (ไว้โชว์บนหมุดแผนที่)
@@ -159,7 +182,9 @@ export default function App() {
   }, [notify])
 
   // คำนวณเส้นทางเมื่อ waypoints เปลี่ยน (debounce กัน OSRM rate limit)
+  // สมาชิก (ไม่ใช่แอดมิน) ไม่เรียก OSRM — ใช้เส้นทางที่แอดมินแชร์มาแทน (ลด traffic)
   useEffect(() => {
+    if (group.inRoom && !group.isAdmin) return
     if (debouncedWps.length < 2) {
       setRoute(null)
       setRouteError('')
@@ -180,7 +205,38 @@ export default function App() {
       })
       .finally(() => setRouteLoading(false))
     return () => ac.abort()
-  }, [debouncedWps])
+  }, [debouncedWps, group.inRoom, group.isAdmin])
+
+  // แอดมิน: sync แผน (จุดแวะ + เส้น polyline) เข้าห้องอัตโนมัติเมื่อเปลี่ยน (ครั้งเดียวต่อการเปลี่ยน)
+  useEffect(() => {
+    if (!group.inRoom || !group.isAdmin) return
+    const t = setTimeout(() => {
+      group.shareRoute({
+        name,
+        waypoints: waypoints.map((w) => ({ name: w.name, lat: w.lat, lng: w.lng })),
+        geometry: route?.coordinates,
+        distance: route?.distance,
+        duration: route?.duration,
+      })
+    }, 700)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.inRoom, group.isAdmin, waypoints, route, name])
+
+  // สมาชิก: รับแผนจากแอดมิน → แสดงเส้นทาง/จุดแวะ โดยไม่เรียก OSRM เอง
+  useEffect(() => {
+    if (!(group.inRoom && group.role === 'member')) return
+    const r = group.sharedRoute
+    if (!r) return
+    setName(r.name || 'ทริปของแอดมิน')
+    setWaypoints(r.waypoints.map((w) => ({ id: uid(), name: w.name, lat: w.lat, lng: w.lng })))
+    if (r.geometry && r.geometry.length > 1) {
+      setRoute({ coordinates: r.geometry, distance: r.distance || 0, duration: r.duration || 0, legs: [] })
+    } else {
+      setRoute(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.inRoom, group.role, group.sharedRoute])
 
   // จุดพักทุก ~100 กม. ตามแนวเส้นทาง
   const restPoints = useMemo<[number, number][]>(() => {
@@ -212,6 +268,7 @@ export default function App() {
   }
 
   const onMapClick = (lat: number, lng: number) => {
+    if (!canEdit) return
     const label = window.prompt('ตั้งชื่อจุดที่ปัก (custom POI):', `จุดแวะ ${waypoints.length + 1}`)
     if (label === null) return
     addWaypoint({ name: label.trim() || `จุดแวะ ${waypoints.length + 1}`, lat, lng, custom: true })
@@ -342,14 +399,6 @@ export default function App() {
     notify('แชร์เส้นทางให้กลุ่มแล้ว 📤')
   }
 
-  const useSharedRoute = () => {
-    const r = group.sharedRoute
-    if (!r) return
-    setWaypoints(r.waypoints.map((w) => ({ ...w, id: uid() })))
-    setTab('map')
-    notify(`ใช้เส้นทาง “${r.name}” แล้ว`)
-  }
-
   const toggleFollow = (id: string) => setFollowId((prev) => (prev === id ? null : id))
 
   // แผนที่ตามคันที่เลือก (recenter ทุกครั้งที่ตำแหน่งอัปเดต)
@@ -469,7 +518,9 @@ export default function App() {
         <div className="flex items-center justify-between gap-2 pt-1.5">
           <div className="flex items-center gap-2">
             <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
-            <span className="font-bold text-sm tracking-tight">MOTO<span className="text-brand">TRIP</span></span>
+            <span className="font-bold text-sm tracking-tight leading-none">
+              Mototrip <span className="text-brand font-semibold text-xs">by saktech</span>
+            </span>
           </div>
           {route ? (
             <div className="flex items-center gap-2 text-xs">
@@ -503,42 +554,50 @@ export default function App() {
           />
         </div>
 
-        {/* ── หน้าแผนที่: ค้นหา + ปุ่มควบคุมลอยบนแผนที่ ── */}
+        {/* ── หน้าแผนที่: ค้นหา + ปุ่มควบคุมลอยบนแผนที่ (เฉพาะคนที่แก้ไขได้) ── */}
         {tab === 'map' && (
           <div className="absolute top-0 inset-x-0 z-[500] p-3 flex flex-col gap-2">
-            <SearchBox onPick={onPickSearch} />
-            <div className="flex gap-2">
-              <button
-                onClick={useCurrentLocation}
-                disabled={locating}
-                className="flex-1 rounded-xl py-2.5 text-xs font-semibold border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition disabled:opacity-50"
-              >
-                {locating ? 'กำลังหา…' : '📍 ตำแหน่งฉัน'}
-              </button>
-              <button
-                onClick={() => setAddingPoint((v) => !v)}
-                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold border backdrop-blur-xl transition active:scale-95 ${
-                  addingPoint ? 'text-white border-transparent shadow-glow' : 'text-white/90 border-white/10 bg-black/60'
-                }`}
-                style={addingPoint ? { background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' } : undefined}
-              >
-                {addingPoint ? '📌 แตะแผนที่…' : '📌 ปักหมุด'}
-              </button>
-              <button
-                onClick={newTrip}
-                className="w-11 rounded-xl grid place-items-center text-lg border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition"
-                aria-label="ทริปใหม่"
-              >
-                ＋
-              </button>
-            </div>
-            {addingPoint && (
-              <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>
-                แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
-              </p>
-            )}
-            {routeError && (
-              <p className="text-xs text-[#ff6a5f] bg-black/70 border border-[#ff3b30]/40 rounded-lg px-3 py-2">⚠️ {routeError}</p>
+            {canEdit ? (
+              <>
+                <SearchBox onPick={onPickSearch} />
+                <div className="flex gap-2">
+                  <button
+                    onClick={useCurrentLocation}
+                    disabled={locating}
+                    className="flex-1 rounded-xl py-2.5 text-xs font-semibold border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition disabled:opacity-50"
+                  >
+                    {locating ? 'กำลังหา…' : '📍 ตำแหน่งฉัน'}
+                  </button>
+                  <button
+                    onClick={() => setAddingPoint((v) => !v)}
+                    className={`flex-1 rounded-xl py-2.5 text-xs font-semibold border backdrop-blur-xl transition active:scale-95 ${
+                      addingPoint ? 'text-white border-transparent shadow-glow' : 'text-white/90 border-white/10 bg-black/60'
+                    }`}
+                    style={addingPoint ? { background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' } : undefined}
+                  >
+                    {addingPoint ? '📌 แตะแผนที่…' : '📌 ปักหมุด'}
+                  </button>
+                  <button
+                    onClick={newTrip}
+                    className="w-11 rounded-xl grid place-items-center text-lg border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition"
+                    aria-label="ทริปใหม่"
+                  >
+                    ＋
+                  </button>
+                </div>
+                {addingPoint && (
+                  <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>
+                    แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
+                  </p>
+                )}
+                {routeError && (
+                  <p className="text-xs text-[#ff6a5f] bg-black/70 border border-[#ff3b30]/40 rounded-lg px-3 py-2">⚠️ {routeError}</p>
+                )}
+              </>
+            ) : (
+              <div className="self-center text-xs text-white/90 rounded-full px-4 py-2 border border-white/10 bg-black/70 backdrop-blur-xl">
+                👀 โหมดดู — ตามแผนที่แอดมินวางไว้
+              </div>
             )}
           </div>
         )}
@@ -548,24 +607,38 @@ export default function App() {
           <div className="absolute inset-0 z-[1001] overflow-y-auto no-scrollbar bg-ink-950 px-4 pt-4 pb-6">
             {tab === 'stops' && (
               <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => setRoundTrip((v) => !v)}
-                  className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm border transition ${roundTrip ? 'chip-on' : 'card-2 text-dim'}`}
-                >
-                  <span>🔁 ทริปไป-กลับ (วนกลับจุดเริ่ม)</span>
-                  <span className={`w-9 h-5 rounded-full relative transition ${roundTrip ? 'bg-white/30' : 'bg-white/10'}`}>
-                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${roundTrip ? 'left-[18px]' : 'left-0.5'}`} />
-                  </span>
-                </button>
-                <WaypointList waypoints={waypoints} route={route} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
-                <p className="text-[11px] text-dim text-center px-2 leading-relaxed">
-                  เพิ่มจุดแวะได้ที่แท็บ “🗺️ แผนที่” (ค้นหา / ปักหมุด / ตำแหน่งฉัน)<br />ลาก ⠿ เพื่อสลับลำดับ
-                </p>
+                {!canEdit && (
+                  <div className="text-xs text-white/90 rounded-lg px-3 py-2 border border-white/10 bg-white/[0.04]">
+                    👀 โหมดดู — จุดแวะตามที่แอดมินวางไว้
+                  </div>
+                )}
+                {canEdit && (
+                  <button
+                    onClick={() => setRoundTrip((v) => !v)}
+                    className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm border transition ${roundTrip ? 'chip-on' : 'card-2 text-dim'}`}
+                  >
+                    <span>🔁 ทริปไป-กลับ (วนกลับจุดเริ่ม)</span>
+                    <span className={`w-9 h-5 rounded-full relative transition ${roundTrip ? 'bg-white/30' : 'bg-white/10'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${roundTrip ? 'left-[18px]' : 'left-0.5'}`} />
+                    </span>
+                  </button>
+                )}
+                <WaypointList waypoints={waypoints} route={route} readOnly={!canEdit} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
+                {canEdit && (
+                  <p className="text-[11px] text-dim text-center px-2 leading-relaxed">
+                    เพิ่มจุดแวะได้ที่แท็บ “🗺️ แผนที่” (ค้นหา / ปักหมุด / ตำแหน่งฉัน)<br />ลาก ⠿ เพื่อสลับลำดับ
+                  </p>
+                )}
               </div>
             )}
 
             {tab === 'places' && (
               <div className="flex flex-col gap-3">
+                {!canEdit && (
+                  <div className="text-xs text-white/90 rounded-lg px-3 py-2 border border-white/10 bg-white/[0.04]">
+                    👀 โหมดดู — ค้นหาร้าน/ปั๊มปิดไว้เพื่อลดโหลด (ตามแผนแอดมิน)
+                  </div>
+                )}
                 <div className="flex gap-1.5">
                   {ALL_KINDS.map((k) => {
                     const on = kinds.has(k)
@@ -577,7 +650,7 @@ export default function App() {
                     )
                   })}
                 </div>
-                <button onClick={searchPois} disabled={poiLoading} className="btn btn-primary w-full py-3">
+                <button onClick={searchPois} disabled={poiLoading || !canEdit} className="btn btn-primary w-full py-3 disabled:opacity-40">
                   {poiLoading ? 'กำลังค้นหา…' : '🔎 ค้นหาร้าน/ปั๊มตามเส้นทาง'}
                 </button>
                 {poiError && <p className="text-xs text-[#ff6a5f]">⚠️ {poiError}</p>}
@@ -609,11 +682,11 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-2">
                   <label className="label flex flex-col gap-1.5">
                     ชื่อทริป
-                    <input value={name} onChange={(e) => setName(e.target.value)} className="field px-3 py-2.5 text-sm normal-case tracking-normal" />
+                    <input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="field px-3 py-2.5 text-sm normal-case tracking-normal disabled:opacity-60" />
                   </label>
                   <label className="label flex flex-col gap-1.5">
                     วันเริ่มทริป
-                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field px-3 py-2.5 text-sm normal-case tracking-normal" />
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={!canEdit} className="field px-3 py-2.5 text-sm normal-case tracking-normal disabled:opacity-60" />
                   </label>
                 </div>
                 <WeatherPanel points={weather} loading={weatherLoading} error={weatherError} usedToday={weatherUsedToday} hasWaypoints={waypoints.length > 0} onFetch={fetchWeather} />
@@ -649,9 +722,16 @@ export default function App() {
                 sharedRoute={group.sharedRoute}
                 messages={group.messages}
                 followId={followId}
-                onJoin={(code, prof) => {
-                  group.join(code, prof)
-                  notify(`เข้าห้อง ${code} แล้ว`)
+                isAdmin={group.isAdmin}
+                inRoom={group.inRoom}
+                onJoin={(code, prof, isCreate) => {
+                  let key = loadAdminKey(code)
+                  if (isCreate) {
+                    key = makeAdminKey()
+                    saveAdminKey(code, key)
+                  }
+                  group.join(code, prof, key)
+                  notify(isCreate ? `สร้างห้อง ${code} — คุณเป็นแอดมิน 👑` : `เข้าห้อง ${code}`)
                 }}
                 onLeave={() => {
                   setFollowId(null)
@@ -661,7 +741,6 @@ export default function App() {
                 onFocusRider={focusRider}
                 onNotify={notify}
                 onShareRoute={shareMyRoute}
-                onUseRoute={useSharedRoute}
                 onSendMessage={(t, e) => {
                   if (group.sendMessage(t, e) === false) notify('ส่งถี่เกินไป เดี๋ยวก่อนนะ ⏳')
                 }}

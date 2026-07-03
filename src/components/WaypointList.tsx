@@ -5,11 +5,12 @@ import { formatDistance } from '../lib/format'
 interface Props {
   waypoints: Waypoint[]
   route: RouteData | null
+  readOnly?: boolean
   onRemove: (id: string) => void
   onReorder: (from: number, to: number) => void
 }
 
-export default function WaypointList({ waypoints, route, onRemove, onReorder }: Props) {
+export default function WaypointList({ waypoints, route, readOnly = false, onRemove, onReorder }: Props) {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
   const itemRefs = useRef<(HTMLLIElement | null)[]>([])
@@ -61,15 +62,17 @@ export default function WaypointList({ waypoints, route, onRemove, onReorder }: 
           } ${overIdx === i && dragIdx !== null && dragIdx !== i ? 'ring-1 ring-brand/60' : ''}`}
         >
           {/* grip ลากเพื่อสลับลำดับ */}
-          <button
-            onPointerDown={onGripDown(i)}
-            onPointerMove={onGripMove}
-            onPointerUp={onGripUp}
-            className="shrink-0 w-7 h-9 -ml-1 flex items-center justify-center text-dim touch-none cursor-grab active:cursor-grabbing"
-            aria-label="ลากเพื่อสลับลำดับ"
-          >
-            ⠿
-          </button>
+          {!readOnly && (
+            <button
+              onPointerDown={onGripDown(i)}
+              onPointerMove={onGripMove}
+              onPointerUp={onGripUp}
+              className="shrink-0 w-7 h-9 -ml-1 flex items-center justify-center text-dim touch-none cursor-grab active:cursor-grabbing"
+              aria-label="ลากเพื่อสลับลำดับ"
+            >
+              ⠿
+            </button>
+          )}
           <span
             className="shrink-0 w-7 h-7 rounded-full text-white text-sm font-bold flex items-center justify-center"
             style={{ background: w.custom ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}
@@ -82,13 +85,15 @@ export default function WaypointList({ waypoints, route, onRemove, onReorder }: 
               <div className="text-xs text-dim">↳ ห่างจากจุดก่อน {formatDistance(route.legs[i - 1].distance)}</div>
             )}
           </div>
-          <button
-            onClick={() => onRemove(w.id)}
-            className="w-9 h-9 shrink-0 rounded-lg btn-danger text-sm active:scale-95 transition"
-            aria-label="ลบจุด"
-          >
-            🗑
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => onRemove(w.id)}
+              className="w-9 h-9 shrink-0 rounded-lg btn-danger text-sm active:scale-95 transition"
+              aria-label="ลบจุด"
+            >
+              🗑
+            </button>
+          )}
         </li>
       ))}
     </ol>
