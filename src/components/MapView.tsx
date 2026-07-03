@@ -104,6 +104,24 @@ function FocusController({ focus }: { focus: Props['focus'] }) {
   return null
 }
 
+/** ให้แผนที่คำนวณขนาดใหม่เมื่อจอเปลี่ยน (iOS toolbar ยืด-หด / rotate) */
+function ResizeHandler() {
+  const map = useMap()
+  useEffect(() => {
+    const fix = () => map.invalidateSize()
+    fix()
+    const t = setTimeout(fix, 300) // เผื่อ layout ยังไม่นิ่งตอน mount
+    window.addEventListener('resize', fix)
+    window.addEventListener('orientationchange', fix)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('resize', fix)
+      window.removeEventListener('orientationchange', fix)
+    }
+  }, [map])
+  return null
+}
+
 export default function MapView({
   waypoints,
   routeCoords,
@@ -135,6 +153,7 @@ export default function MapView({
       <ClickHandler onClick={onMapClick} active={addingPoint} />
       <FitBounds waypoints={waypoints} routeCoords={routeCoords} />
       <FocusController focus={focus} />
+      <ResizeHandler />
 
       {routeCoords.length > 1 && (
         <>
