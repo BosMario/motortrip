@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { searchPlace, type SearchResult } from '../lib/nominatim'
+import type { SearchResult } from '../lib/nominatim'
+import { searchPlaces } from '../lib/photon'
 import { useDebounced } from '../hooks/useDebounced'
 
 interface Props {
@@ -27,7 +28,7 @@ export default function SearchBox({ onPick }: Props) {
     ctrl.current = ac
     setLoading(true)
     setError('')
-    searchPlace(query, ac.signal)
+    searchPlaces(query, ac.signal)
       .then((r) => {
         setResults(r)
         setOpen(true)
