@@ -1,0 +1,14 @@
+# Cloudflare Worker + Durable Object สำหรับฟีเจอร์ "กลุ่มทริป realtime"
+# deploy: npx wrangler deploy   (dev: npx wrangler dev)
+name = "moto-trip-group"
+main = "worker/index.js"
+compatibility_date = "2024-09-23"
+
+[[durable_objects.bindings]]
+name = "GROUP_ROOM"
+class_name = "GroupRoom"
+
+# Durable Object บน free plan ต้องใช้ SQLite-backed storage
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GroupRoom"]
