@@ -1,4 +1,7 @@
 /** ฐาน URL ของ Worker (แปลง ws/wss → http/https) */
+export function workerHttpBase(): string {
+  return syncBase()
+}
 function syncBase(): string {
   const base = (import.meta.env.VITE_GROUP_WS as string | undefined)?.trim()
   if (base) return base.replace(/^ws/, 'http').replace(/\/$/, '') // wss:// → https://

@@ -21,6 +21,7 @@ import { fetchRoute } from './lib/osrm'
 import { fetchPois } from './lib/overpass'
 import { KIND_META } from './lib/poiMeta'
 import { reverseGeocode, type SearchResult } from './lib/nominatim'
+import { parseLocation } from './lib/location'
 import { toPng } from 'html-to-image'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import {
@@ -324,6 +325,21 @@ export default function App() {
     const short = r.name.split(',')[0]
     addWaypoint({ name: short, lat: r.lat, lng: r.lng })
     notify(`เพิ่ม “${short}” แล้ว`)
+  }
+
+  const importFromGoogle = async () => {
+    const input = window.prompt('วางลิงก์ Google Maps หรือพิกัด (เช่น 17.61, 100.09)\nรองรับลิงก์ย่อ maps.app.goo.gl ด้วย:')
+    if (input === null || !input.trim()) return
+    notify('กำลังนำเข้าตำแหน่ง…')
+    const loc = await parseLocation(input)
+    if (!loc) {
+      notify('อ่านพิกัดไม่ได้ — ลองวางลิงก์ที่มี @lat,lng หรือพิกัดตรง ๆ')
+      return
+    }
+    const nm = await reverseGeocode(loc.lat, loc.lng).catch(() => 'ตำแหน่งจาก Google Maps')
+    addWaypoint({ name: nm, lat: loc.lat, lng: loc.lng, custom: true })
+    setFocus({ lat: loc.lat, lng: loc.lng, nonce: Date.now() })
+    notify(`นำเข้า “${nm}” แล้ว 📍`)
   }
 
   const onMapClick = (lat: number, lng: number) => {
@@ -677,6 +693,12 @@ export default function App() {
                     ＋
                   </button>
                 </div>
+                <button
+                  onClick={importFromGoogle}
+                  className="rounded-xl py-2 text-xs font-semibold border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition"
+                >
+                  📎 นำเข้าจาก Google Maps (วางลิงก์/พิกัด)
+                </button>
                 {addingPoint && (
                   <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}>
                     แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
