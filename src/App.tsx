@@ -22,6 +22,8 @@ import { fetchPois } from './lib/overpass'
 import { KIND_META } from './lib/poiMeta'
 import { reverseGeocode, type SearchResult } from './lib/nominatim'
 import { parseLocation } from './lib/location'
+import { TEMPLATES, type RouteTemplate } from './lib/templates'
+import { buildGPX, parseGPX } from './lib/gpx'
 import { toPng } from 'html-to-image'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import {
@@ -651,6 +653,46 @@ export default function App() {
     setTab('map')
   }
 
+  // ── เทมเพลตทริปยอดนิยม ──
+  const loadTemplate = (t: RouteTemplate) => {
+    if (waypoints.length > 1 && !window.confirm(`โหลด “${t.name}” จะแทนที่จุดแวะปัจจุบัน ยืนยัน?`)) return
+    setName(t.name)
+    setDate('')
+    setRoundTrip(!!t.roundTrip)
+    setWaypoints(t.stops.map((st) => ({ id: uid(), name: st.name, lat: st.lat, lng: st.lng, overnight: st.overnight })))
+    setPois([])
+    setCurrentId(uid())
+    setTab('map')
+    notify(`โหลดเส้นทาง “${t.name}” แล้ว ${t.emoji}`)
+  }
+
+  // ── Export / Import GPX ──
+  const exportGPX = () => {
+    if (waypoints.length < 1) return notify('ยังไม่มีจุดแวะให้ส่งออก')
+    const gpx = buildGPX(name || 'ทริป', waypoints, route?.coordinates)
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(name || 'trip').replace(/[^\w฀-๿]+/g, '_')}.gpx`
+    a.click()
+    URL.revokeObjectURL(url)
+    notify('ส่งออกไฟล์ GPX แล้ว 📤')
+  }
+  const gpxInputRef = useRef<HTMLInputElement>(null)
+  const importGPX = async (file: File) => {
+    const text = await file.text()
+    const parsed = parseGPX(text)
+    if (!parsed || !parsed.waypoints.length) return notify('อ่านไฟล์ GPX ไม่สำเร็จ')
+    if (waypoints.length > 1 && !window.confirm(`นำเข้า ${parsed.waypoints.length} จุดจาก GPX จะแทนที่จุดแวะปัจจุบัน ยืนยัน?`)) return
+    setName(parsed.name)
+    setWaypoints(parsed.waypoints.map((w) => ({ id: uid(), name: w.name, lat: w.lat, lng: w.lng })))
+    setPois([])
+    setCurrentId(uid())
+    setTab('map')
+    notify(`นำเข้า ${parsed.waypoints.length} จุดจาก GPX แล้ว 📥`)
+  }
+
   const onShare = async () => {
     if (waypoints.length === 0) {
       notify('เพิ่มจุดแวะก่อนแชร์นะ')
@@ -822,6 +864,49 @@ export default function App() {
                     </span>
                   </button>
                 )}
+
+                {canEdit && (
+                  <details className="card-2 rounded-xl overflow-hidden" open={waypoints.length <= 1}>
+                    <summary className="px-3 py-2.5 text-sm font-semibold cursor-pointer select-none flex items-center justify-between">
+                      <span>🗺️ เริ่มจากเส้นทางยอดนิยม</span>
+                      <span className="text-xs text-dim">{TEMPLATES.length} เส้นทาง</span>
+                    </summary>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar px-3 pb-3 pt-1 -mt-1">
+                      {TEMPLATES.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => loadTemplate(t)}
+                          className="shrink-0 w-40 text-left rounded-xl p-3 border border-white/10 bg-gradient-to-br from-white/[0.07] to-transparent active:scale-95 transition"
+                        >
+                          <div className="text-2xl mb-1">{t.emoji}</div>
+                          <div className="text-sm font-bold leading-tight">{t.name}</div>
+                          <div className="text-[10px] text-brand mt-0.5">📍 {t.region}</div>
+                          <div className="text-[10px] text-dim mt-1 leading-snug line-clamp-2">{t.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 px-3 pb-3">
+                      <button onClick={() => gpxInputRef.current?.click()} className="flex-1 chip px-3 py-2 text-xs">
+                        📥 นำเข้า GPX
+                      </button>
+                      <button onClick={exportGPX} className="flex-1 chip px-3 py-2 text-xs">
+                        📤 ส่งออก GPX
+                      </button>
+                      <input
+                        ref={gpxInputRef}
+                        type="file"
+                        accept=".gpx,application/gpx+xml,application/xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) importGPX(f)
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
+                  </details>
+                )}
+
                 <WaypointList
                   waypoints={waypoints}
                   route={route}
