@@ -5,6 +5,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
     "strict": true,
     "emitDeclarationOnly": true,
     "outDir": "./node_modules/.tmp"

@@ -545,10 +545,14 @@ export default function App() {
       {/* ===== Header: โลโก้ + สถิติเส้นทาง ===== */}
       <header className="shrink-0 pt-safe px-3.5 pb-2 z-[1002] border-b border-white/[0.06] bg-black/50 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 pt-1.5">
-          <div className="flex items-center gap-2">
+          <button
+            className="flex items-center gap-2 active:scale-95 transition"
+            onClick={() => notify(`SAKTECHTRIP v${__APP_VERSION__} · build ${__BUILD_HASH__} · ${__BUILD_DATE__}`)}
+          >
             <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
             <span className="font-bold text-sm tracking-tight">SAKTECH<span className="text-brand">TRIP</span></span>
-          </div>
+            <span className="text-[9px] text-dim font-medium ml-0.5">v{__APP_VERSION__}</span>
+          </button>
           {route ? (
             <div className="flex items-center gap-2 text-xs">
               <span className="font-bold text-sm">{formatDistance(route.distance)}</span>
@@ -731,6 +735,9 @@ export default function App() {
                   <h3 className="label mb-2 px-1">🗺️ ทริปที่บันทึก</h3>
                   <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
                 </div>
+                <p className="text-center text-[10px] text-dim pt-2 pb-1">
+                  SAKTECHTRIP v{__APP_VERSION__} · build {__BUILD_HASH__} · {__BUILD_DATE__}
+                </p>
               </div>
             )}
 
