@@ -14,6 +14,8 @@ interface Props {
   myId: string | null
   /** emoji อากาศเรียงตาม waypoints (undefined = ยังไม่มี) */
   weatherEmojis?: (string | undefined)[]
+  /** เส้นที่กำลังบันทึกจาก GPS จริง */
+  recTrack?: [number, number][]
   addingPoint: boolean
   focus: { lat: number; lng: number; nonce: number } | null
   onMapClick: (lat: number, lng: number) => void
@@ -130,6 +132,7 @@ export default function MapView({
   riders,
   myId,
   weatherEmojis,
+  recTrack,
   addingPoint,
   focus,
   onMapClick,
@@ -166,6 +169,14 @@ export default function MapView({
             pathOptions={{ color: '#ffffff', weight: 2.5, opacity: 0.9, dashArray: '1 15' }}
           />
           {riders.length === 0 && <RouteRider coords={routeCoords} />}
+        </>
+      )}
+
+      {/* เส้นที่กำลังบันทึกจาก GPS จริง (เขียว) */}
+      {recTrack && recTrack.length > 1 && (
+        <>
+          <Polyline positions={recTrack} pathOptions={{ color: '#000000', weight: 8, opacity: 0.4 }} />
+          <Polyline positions={recTrack} pathOptions={{ color: '#22c55e', weight: 4, opacity: 0.95 }} />
         </>
       )}
 

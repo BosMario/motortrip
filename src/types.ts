@@ -52,6 +52,15 @@ export interface SharedRoute {
 
 export type GroupRole = 'admin' | 'member'
 
+/** สถิติการขับจริงที่บันทึกไว้ (จาก GPS) */
+export interface Ride {
+  id: string
+  /** วันที่ขับ (ISO) */
+  date: string
+  distanceM: number
+  durationS: number
+}
+
 /** ข้อความด่วนในกลุ่ม */
 export interface GroupMessage {
   id: string

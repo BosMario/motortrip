@@ -1,7 +1,8 @@
-import type { SavedPlace, Trip } from '../types'
+import type { Ride, SavedPlace, Trip } from '../types'
 
 const KEY = 'moto-trips-v1'
 const PLACES_KEY = 'moto-places-v1'
+const RIDES_KEY = 'moto-rides-v1'
 
 export function loadTrips(): Trip[] {
   try {
@@ -78,4 +79,25 @@ export function deletePlace(key: string): SavedPlace[] {
   const places = loadPlaces().filter((p) => placeKey(p) !== key)
   savePlaces(places)
   return places
+}
+
+// ---------- การขับจริงที่บันทึก (GPS) ----------
+
+export function loadRides(): Ride[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(RIDES_KEY) || '[]') as Ride[]
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+export function addRide(r: Ride): Ride[] {
+  const rides = [r, ...loadRides()].slice(0, 200)
+  try {
+    localStorage.setItem(RIDES_KEY, JSON.stringify(rides))
+  } catch {
+    /* noop */
+  }
+  return rides
 }

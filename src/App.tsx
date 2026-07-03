@@ -15,6 +15,7 @@ import SyncPanel from './components/SyncPanel'
 import Onboarding from './components/Onboarding'
 import { fetchTripWeather, type WeatherPoint } from './lib/weather'
 import { useGroup, loadProfile } from './hooks/useGroup'
+import { useRideRecorder } from './hooks/useRideRecorder'
 import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from './types'
 import { fetchRoute } from './lib/osrm'
 import { fetchPois } from './lib/overpass'
@@ -26,6 +27,7 @@ import {
   deleteTrip as delTrip,
   deletePlace,
   loadPlaces,
+  loadRides,
   loadTrips,
   placeKey,
   savePlaces,
@@ -85,6 +87,15 @@ const makeDefaultStart = (): Waypoint => ({ ...DEFAULT_START, id: uid() })
 
 const ALL_KINDS: PoiKind[] = ['fuel', 'charging', 'cafe', 'restaurant']
 
+function fmtElapsed(s: number): string {
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${m}:${String(sec).padStart(2, '0')}`
+}
+
 export default function App() {
   const [name, setName] = useState('ทริปใหม่')
   const [date, setDate] = useState('')
@@ -126,6 +137,8 @@ export default function App() {
   const [themeId, setThemeId] = useState(loadThemeId)
 
   const group = useGroup()
+  const recorder = useRideRecorder()
+  const [rides, setRides] = useState(loadRides)
   const [groupInitialCode] = useState(readGroupCode)
   const [profile] = useState(loadProfile)
   const [followId, setFollowId] = useState<string | null>(null)
@@ -156,9 +169,21 @@ export default function App() {
       count: savedTrips.length,
       totalM: savedTrips.reduce((s, t) => s + (t.distanceM || 0), 0),
       totalStops: savedTrips.reduce((s, t) => s + t.waypoints.length, 0),
+      rideCount: rides.length,
+      rideM: rides.reduce((s, r) => s + r.distanceM, 0),
     }),
-    [savedTrips]
+    [savedTrips, rides]
   )
+
+  const stopRide = () => {
+    const r = recorder.stop()
+    if (r) {
+      setRides(loadRides())
+      notify(`บันทึกการขับ ${formatDistance(r.distanceM)} 🏁`)
+    } else {
+      notify('ระยะสั้นเกินไป ไม่บันทึก')
+    }
+  }
 
   // สมาชิกเห็นร้านที่แอดมินแชร์ (ไม่เรียก Overpass เอง) · แอดมิน/เดี่ยวใช้ผลค้นหาตัวเอง
   const visiblePois = useMemo(() => {
@@ -612,6 +637,7 @@ export default function App() {
             riders={group.positioned}
             myId={group.myId}
             weatherEmojis={weatherEmojis}
+            recTrack={recorder.recording ? recorder.track : undefined}
             addingPoint={addingPoint}
             focus={focus}
             onMapClick={onMapClick}
@@ -679,6 +705,31 @@ export default function App() {
           >
             🧭 นำทาง
           </a>
+        )}
+
+        {/* บันทึกการขับจริง (GPS) — มุมล่างซ้าย */}
+        {tab === 'map' && (
+          <div className="absolute bottom-4 left-3 z-[600]">
+            {recorder.recording ? (
+              <div className="rounded-full pl-3 pr-1.5 py-1.5 flex items-center gap-2 border border-white/10 bg-black/80 backdrop-blur-xl shadow-card">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-bold">{formatDistance(recorder.distanceM)}</span>
+                <span className="text-xs text-dim font-mono">{fmtElapsed(recorder.elapsedS)}</span>
+                <button onClick={stopRide} className="ml-1 rounded-full px-3 py-1.5 text-xs font-bold btn-danger">
+                  หยุด
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={recorder.start}
+                className="rounded-full w-12 h-12 grid place-items-center border border-white/10 bg-black/70 backdrop-blur-xl text-xl active:scale-95 transition"
+                title="บันทึกการขับจริง (GPS)"
+                aria-label="บันทึกการขับจริง"
+              >
+                🔴
+              </button>
+            )}
+          </div>
         )}
 
         {/* ── หน้าอื่น ๆ (ทับแผนที่เต็มจอ) ── */}
@@ -789,7 +840,7 @@ export default function App() {
                   <button onClick={saveTrip} className="btn btn-primary py-3">💾 บันทึกทริป</button>
                   <button onClick={onShare} className="btn btn-ghost py-3">🔗 แชร์ทริป</button>
                 </div>
-                {stats.count > 0 && (
+                {(stats.count > 0 || stats.rideCount > 0) && (
                   <div className="card p-3">
                     <div className="label mb-2">📊 สถิติของฉัน</div>
                     <div className="grid grid-cols-3 gap-2 text-center">
@@ -799,13 +850,25 @@ export default function App() {
                       </div>
                       <div>
                         <div className="text-2xl font-bold tracking-tight">{formatDistance(stats.totalM)}</div>
-                        <div className="text-[10px] text-dim">ระยะทางรวม</div>
+                        <div className="text-[10px] text-dim">ระยะที่วางแผน</div>
                       </div>
                       <div>
                         <div className="text-2xl font-bold tracking-tight">{stats.totalStops}</div>
                         <div className="text-[10px] text-dim">จุดแวะรวม</div>
                       </div>
                     </div>
+                    {stats.rideCount > 0 && (
+                      <div className="grid grid-cols-2 gap-2 text-center mt-2 pt-2 border-t border-white/[0.07]">
+                        <div>
+                          <div className="text-2xl font-bold tracking-tight text-brand">{formatDistance(stats.rideM)}</div>
+                          <div className="text-[10px] text-dim">🏍️ ระยะที่ขับจริง</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold tracking-tight text-brand">{stats.rideCount}</div>
+                          <div className="text-[10px] text-dim">🏁 จำนวนการขับ</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
