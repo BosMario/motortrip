@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchElevation, type ElevationData } from '../lib/elevation'
 
 interface Props {
@@ -10,6 +10,9 @@ export default function ElevationProfile({ routeCoords }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const ctrl = useRef<AbortController | null>(null)
+  const lastSig = useRef('')
+
+  const sig = routeCoords.length ? `${routeCoords.length}|${routeCoords[0]?.join(',')}|${routeCoords[routeCoords.length - 1]?.join(',')}` : ''
 
   const load = async () => {
     if (routeCoords.length < 2) return
@@ -21,13 +24,22 @@ export default function ElevationProfile({ routeCoords }: Props) {
     try {
       setData(await fetchElevation(routeCoords, ac.signal))
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setError('ดึงข้อมูลความชันไม่สำเร็จ ลองใหม่')
+      if ((e as Error).name !== 'AbortError') setError('ดึงข้อมูลความชันไม่สำเร็จ')
     } finally {
       setLoading(false)
     }
   }
 
-  // สร้าง path SVG จากจุดความสูง
+  // โหลดอัตโนมัติเมื่อมีเส้นทาง (เปลี่ยนเส้นทาง → ดึงใหม่)
+  useEffect(() => {
+    if (routeCoords.length >= 2 && sig !== lastSig.current) {
+      lastSig.current = sig
+      load()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig])
+
+  // สร้าง path SVG
   let areaPath = ''
   let linePath = ''
   if (data && data.points.length > 1) {
@@ -43,19 +55,41 @@ export default function ElevationProfile({ routeCoords }: Props) {
     areaPath = `${linePath} L${W},${H} L0,${H} Z`
   }
 
+  // สรุปเป็นภาษาคน
+  const climbNote = data
+    ? data.gain > 400
+      ? 'ทางขึ้นเขาชัน เตรียมรถ+เบรกให้พร้อม 🏔️'
+      : data.gain > 150
+        ? 'มีเนินบ้าง แต่ไม่หนัก'
+        : 'ทางค่อนข้างราบ'
+    : ''
+
   return (
     <div className="card p-3 flex flex-col gap-2.5">
-      <div className="label">⛰️ โปรไฟล์ความชัน (Open-Meteo · ฟรี)</div>
+      <div className="flex items-center justify-between">
+        <div className="label">⛰️ ความชันเส้นทาง (Open-Meteo · ฟรี)</div>
+        {data && (
+          <button onClick={load} disabled={loading} className="text-xs text-brand disabled:opacity-50">
+            {loading ? '…' : '🔄'}
+          </button>
+        )}
+      </div>
 
-      {!data && (
-        <button onClick={load} disabled={loading || routeCoords.length < 2} className="btn btn-ghost w-full py-2.5 text-sm disabled:opacity-40">
-          {loading ? 'กำลังดึงข้อมูล…' : routeCoords.length < 2 ? 'ยังไม่มีเส้นทาง' : '⛰️ ดูความชันเส้นทาง'}
+      {loading && !data && <div className="text-sm text-dim text-center py-3 animate-pulse">กำลังดึงข้อมูลความชัน…</div>}
+      {error && (
+        <button onClick={load} className="btn btn-ghost w-full py-2 text-sm">
+          ⚠️ {error} — แตะเพื่อลองใหม่
         </button>
       )}
-      {error && <p className="text-xs text-[#ff6a5f]">⚠️ {error}</p>}
+      {!loading && !data && !error && routeCoords.length < 2 && <p className="text-sm text-dim">เพิ่มจุดแวะ ≥ 2 จุดเพื่อดูความชัน</p>}
 
       {data && (
         <>
+          <div className="text-sm">
+            <b className="text-[#ff7a45]">↗ ไต่ขึ้นรวม {data.gain.toLocaleString()} ม.</b>
+            <span className="text-dim"> · สูงสุด {data.max.toLocaleString()} ม.</span>
+          </div>
+          <p className="text-xs text-dim -mt-1">{climbNote}</p>
           <svg viewBox="0 0 300 70" preserveAspectRatio="none" className="w-full h-16 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
             <defs>
               <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
@@ -66,27 +100,11 @@ export default function ElevationProfile({ routeCoords }: Props) {
             <path d={areaPath} fill="url(#elevGrad)" />
             <path d={linePath} fill="none" stroke="#ff7a45" strokeWidth="1.5" />
           </svg>
-          <div className="grid grid-cols-4 gap-1.5 text-center">
-            <div className="card-2 py-1.5">
-              <div className="text-[10px] text-dim">↗ ไต่รวม</div>
-              <div className="text-sm font-bold text-[#ff7a45]">{data.gain} ม.</div>
-            </div>
-            <div className="card-2 py-1.5">
-              <div className="text-[10px] text-dim">↘ ลงรวม</div>
-              <div className="text-sm font-bold text-blue-300">{data.loss} ม.</div>
-            </div>
-            <div className="card-2 py-1.5">
-              <div className="text-[10px] text-dim">สูงสุด</div>
-              <div className="text-sm font-bold">{data.max}</div>
-            </div>
-            <div className="card-2 py-1.5">
-              <div className="text-[10px] text-dim">ต่ำสุด</div>
-              <div className="text-sm font-bold">{data.min}</div>
-            </div>
+          <div className="flex justify-between text-[11px] text-dim">
+            <span>◀ ออกเดินทาง</span>
+            <span>↘ ลง {data.loss.toLocaleString()} ม. · ต่ำสุด {data.min} ม.</span>
+            <span>ปลายทาง ▶</span>
           </div>
-          <button onClick={load} disabled={loading} className="text-xs text-brand self-end disabled:opacity-50">
-            {loading ? '…' : '🔄 คำนวณใหม่'}
-          </button>
         </>
       )}
     </div>
