@@ -11,6 +11,7 @@ import WeatherPanel from './components/WeatherPanel'
 import TripEstimate from './components/TripEstimate'
 import ElevationProfile from './components/ElevationProfile'
 import SyncPanel from './components/SyncPanel'
+import Onboarding from './components/Onboarding'
 import { fetchTripWeather, type WeatherPoint } from './lib/weather'
 import { useGroup, loadProfile } from './hooks/useGroup'
 import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from './types'
@@ -119,6 +120,7 @@ export default function App() {
   const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
   const [tab, setTab] = useState<Tab>(() => (readGroupCode() ? 'group' : 'map'))
   const [toast, setToast] = useState('')
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('moto-onboarded-v1'))
 
   const group = useGroup()
   const [groupInitialCode] = useState(readGroupCode)
@@ -793,6 +795,9 @@ export default function App() {
                   <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
                 </div>
                 <SyncPanel trips={savedTrips} places={savedPlaces} onPull={onSyncPull} onNotify={notify} />
+                <button onClick={() => setShowOnboarding(true)} className="btn btn-ghost py-2.5 text-sm">
+                  👋 ดูวิธีใช้อีกครั้ง
+                </button>
                 <p className="text-center text-[10px] text-dim pt-2 pb-1">
                   SAKTECHTRIP v{__APP_VERSION__} · build {__BUILD_HASH__} · {__BUILD_DATE__}
                 </p>
@@ -879,6 +884,15 @@ export default function App() {
           )
         })}
       </nav>
+
+      {showOnboarding && (
+        <Onboarding
+          onClose={() => {
+            localStorage.setItem('moto-onboarded-v1', '1')
+            setShowOnboarding(false)
+          }}
+        />
+      )}
     </div>
   )
 }
