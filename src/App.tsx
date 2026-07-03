@@ -97,6 +97,9 @@ export default function App() {
 
   const savedKeys = useMemo(() => new Set(savedPlaces.map((p) => placeKey(p))), [savedPlaces])
 
+  // emoji อากาศเรียงตาม waypoints (ไว้โชว์บนหมุดแผนที่)
+  const weatherEmojis = useMemo(() => weather.map((w) => (w.available ? w.emoji : undefined)), [weather])
+
   // กรอง POI ที่แสดงตามหมวดที่เลือก (สลับ chip แล้วซ่อน/โชว์ทันทีไม่ต้องค้นใหม่)
   const visiblePois = useMemo(() => pois.filter((p) => kinds.has(p.kind)), [pois, kinds])
 
@@ -459,6 +462,7 @@ export default function App() {
           pois={visiblePois}
           riders={group.positioned}
           myId={group.myId}
+          weatherEmojis={weatherEmojis}
           addingPoint={addingPoint}
           focus={focus}
           onMapClick={onMapClick}

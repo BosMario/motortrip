@@ -12,6 +12,8 @@ interface Props {
   pois: Poi[]
   riders: Rider[]
   myId: string | null
+  /** emoji อากาศเรียงตาม waypoints (undefined = ยังไม่มี) */
+  weatherEmojis?: (string | undefined)[]
   addingPoint: boolean
   focus: { lat: number; lng: number; nonce: number } | null
   onMapClick: (lat: number, lng: number) => void
@@ -66,6 +68,7 @@ export default function MapView({
   pois,
   riders,
   myId,
+  weatherEmojis,
   addingPoint,
   focus,
   onMapClick,
@@ -94,6 +97,12 @@ export default function MapView({
         <>
           <Polyline positions={routeCoords} pathOptions={{ color: '#000000', weight: 9, opacity: 0.45 }} />
           <Polyline positions={routeCoords} pathOptions={{ color: '#ff5a1f', weight: 4.5, opacity: 1 }} />
+          {/* จุดไหลบอกทิศทาง (ใส่ class ผ่าน ref เพราะ react-leaflet ไม่ส่ง className ให้ path) */}
+          <Polyline
+            ref={(layer) => layer?.getElement()?.classList.add('route-flow')}
+            positions={routeCoords}
+            pathOptions={{ color: '#ffffff', weight: 2.5, opacity: 0.9, dashArray: '1 15' }}
+          />
         </>
       )}
 
@@ -167,7 +176,7 @@ export default function MapView({
 
       {/* waypoints */}
       {waypoints.map((w, i) => (
-        <Marker key={w.id} position={[w.lat, w.lng]} icon={waypointIcon(i, w.custom)}>
+        <Marker key={w.id} position={[w.lat, w.lng]} icon={waypointIcon(i, waypoints.length, w.custom, weatherEmojis?.[i])}>
           <Popup>
             <div className="min-w-[150px]">
               <div className="font-semibold mb-1">
