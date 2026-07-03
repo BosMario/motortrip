@@ -328,18 +328,20 @@ export default function App() {
   }
 
   const importFromGoogle = async () => {
-    const input = window.prompt('วางลิงก์ Google Maps หรือพิกัด (เช่น 17.61, 100.09)\nรองรับลิงก์ย่อ maps.app.goo.gl ด้วย:')
+    const input = window.prompt(
+      'วางพิกัด หรือ ลิงก์ Google Maps:\n\n• ชัวร์สุด — แตะค้างจุดในแอป Google Maps → คัดลอกพิกัด (เช่น 17.61, 100.09) มาวาง\n• หรือวางลิงก์แชร์ (ลิงก์ย่อบางอันอาจได้ตำแหน่งโดยประมาณ)'
+    )
     if (input === null || !input.trim()) return
     notify('กำลังนำเข้าตำแหน่ง…')
     const loc = await parseLocation(input)
     if (!loc) {
-      notify('อ่านพิกัดไม่ได้ — ลองวางลิงก์ที่มี @lat,lng หรือพิกัดตรง ๆ')
+      notify('อ่านตำแหน่งไม่ได้ — ลองคัดลอก “พิกัด” จาก Google Maps มาวางแทน (แม่นสุด)')
       return
     }
-    const nm = await reverseGeocode(loc.lat, loc.lng).catch(() => 'ตำแหน่งจาก Google Maps')
+    const nm = loc.name || (await reverseGeocode(loc.lat, loc.lng).catch(() => 'ตำแหน่งจาก Google Maps'))
     addWaypoint({ name: nm, lat: loc.lat, lng: loc.lng, custom: true })
     setFocus({ lat: loc.lat, lng: loc.lng, nonce: Date.now() })
-    notify(`นำเข้า “${nm}” แล้ว 📍`)
+    notify(loc.approx ? `นำเข้า “${nm}” (ตำแหน่งโดยประมาณ) 📍` : `นำเข้า “${nm}” แล้ว 📍`)
   }
 
   const onMapClick = (lat: number, lng: number) => {
