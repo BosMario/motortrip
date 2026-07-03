@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView'
 import SearchBox from './components/SearchBox'
 import WaypointList from './components/WaypointList'
-import TripSummary from './components/TripSummary'
+import TripSummary, { type SummaryExtra } from './components/TripSummary'
 import SavedTrips from './components/SavedTrips'
 import PoiList from './components/PoiList'
 import SavedPlaces from './components/SavedPlaces'
@@ -88,6 +88,13 @@ const makeDefaultStart = (): Waypoint => ({ ...DEFAULT_START, id: uid() })
 
 const ALL_KINDS: PoiKind[] = ['fuel', 'charging', 'cafe', 'restaurant']
 
+function addHHMM(depart: string, addMin: number): string {
+  const [h, m] = depart.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return ''
+  const total = ((h * 60 + m + Math.round(addMin)) % 1440 + 1440) % 1440
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
 function fmtElapsed(s: number): string {
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
@@ -123,6 +130,7 @@ export default function App() {
   const weatherCtrl = useRef<AbortController | null>(null)
   const weatherKey = useRef('')
   const summaryRef = useRef<HTMLDivElement>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisteredSW(_url, reg) {
       // เช็คเวอร์ชันใหม่ตอนเปิด + ทุก 1 นาที (กันค้างแคช)
@@ -163,6 +171,30 @@ export default function App() {
 
   // จำนวนวันของทริป (นับจากจุดค้างคืน)
   const totalDays = useMemo(() => 1 + waypoints.slice(0, -1).filter((w) => w.overnight).length, [waypoints])
+
+  // รายละเอียดเพิ่มเติมสำหรับการ์ดสรุป (ค่าน้ำมัน/เวลา/ฝน)
+  const summaryExtra = useMemo<SummaryExtra>(() => {
+    let est: { bikes?: { id: string; kmPerLiter: number }[]; activeBikeId?: string; pricePerLiter?: number; depart?: string } = {}
+    try {
+      est = JSON.parse(localStorage.getItem('moto-estimate-v2') || '{}')
+    } catch {
+      /* noop */
+    }
+    const bike = est.bikes?.find((b) => b.id === est.activeBikeId) || est.bikes?.[0]
+    const kmpl = bike?.kmPerLiter || 25
+    const price = est.pricePerLiter || 40
+    const depart = est.depart || '07:00'
+    const liters = route ? route.distance / 1000 / kmpl : 0
+    const rainAt = weather.filter((w) => w.available && (w.rainProb ?? 0) >= 60).map((w) => w.name)
+    return {
+      totalDays,
+      fuelCost: route ? liters * price : undefined,
+      liters: route ? liters : undefined,
+      departTime: route ? depart : undefined,
+      arriveTime: route ? addHHMM(depart, (route.duration * 1.2) / 60) : undefined,
+      rainAt,
+    }
+  }, [route, weather, totalDays])
 
   // สถิติจากทริปที่บันทึก
   const stats = useMemo(
@@ -422,28 +454,40 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, date, waypoints])
 
+  // สร้างรูป → เปิดพรีวิว (ยังไม่บันทึก)
   const exportSummary = async () => {
     if (!summaryRef.current) return
     setExporting(true)
     try {
       const dataUrl = await toPng(summaryRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: '#0a0a0c' })
-      const file = new File([await (await fetch(dataUrl)).blob()], `moto-trip-${name || 'trip'}.png`, {
-        type: 'image/png',
-      })
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: name }).catch(() => {})
-        notify('เปิดหน้าต่างแชร์รูปแล้ว 📸')
-      } else {
-        const a = document.createElement('a')
-        a.href = dataUrl
-        a.download = file.name
-        a.click()
-        notify('บันทึกรูปสรุปทริปแล้ว 📸')
-      }
+      setPreviewUrl(dataUrl)
     } catch {
       notify('สร้างรูปไม่สำเร็จ ลองใหม่')
     } finally {
       setExporting(false)
+    }
+  }
+
+  const savePreview = () => {
+    if (!previewUrl) return
+    const a = document.createElement('a')
+    a.href = previewUrl
+    a.download = `saktechtrip-${(name || 'trip').replace(/\s+/g, '-')}.png`
+    a.click()
+    notify('บันทึกรูปแล้ว 📸')
+  }
+
+  const sharePreview = async () => {
+    if (!previewUrl) return
+    try {
+      const file = new File([await (await fetch(previewUrl)).blob()], 'saktechtrip.png', { type: 'image/png' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: name }).catch(() => {})
+      } else {
+        savePreview()
+      }
+    } catch {
+      notify('แชร์ไม่สำเร็จ')
     }
   }
 
@@ -856,7 +900,7 @@ export default function App() {
                   <WeatherRoute coords={route.coordinates} distanceM={route.distance} durationS={route.duration} tripDate={date} />
                 )}
                 <ElevationProfile routeCoords={route?.coordinates ?? []} />
-                <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
+                <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} extra={summaryExtra} />
                 <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
                   {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
                 </button>
@@ -1018,6 +1062,30 @@ export default function App() {
             setShowOnboarding(false)
           }}
         />
+      )}
+
+      {/* พรีวิวรูปสรุปทริปก่อนบันทึก/แชร์ */}
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div className="w-full max-w-sm flex flex-col gap-3 my-auto" onClick={(ev) => ev.stopPropagation()}>
+            <div className="text-center text-sm text-dim">📸 พรีวิวก่อนบันทึก/แชร์</div>
+            <img src={previewUrl} alt="สรุปทริป" className="w-full rounded-2xl border border-white/10 shadow-card" />
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={savePreview} className="btn btn-white py-3">
+                💾 บันทึกรูป
+              </button>
+              <button onClick={sharePreview} className="btn btn-primary py-3">
+                🔗 แชร์
+              </button>
+            </div>
+            <button onClick={() => setPreviewUrl(null)} className="btn btn-ghost py-2.5 text-sm">
+              ปิด
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
