@@ -86,19 +86,19 @@ export default function ElevationProfile({ routeCoords }: Props) {
       {data && (
         <>
           <div className="text-sm">
-            <b className="text-[#ff7a45]">↗ ไต่ขึ้นรวม {data.gain.toLocaleString()} ม.</b>
+            <b className="text-brand">↗ ไต่ขึ้นรวม {data.gain.toLocaleString()} ม.</b>
             <span className="text-dim"> · สูงสุด {data.max.toLocaleString()} ม.</span>
           </div>
           <p className="text-xs text-dim -mt-1">{climbNote}</p>
           <svg viewBox="0 0 300 70" preserveAspectRatio="none" className="w-full h-16 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
             <defs>
               <linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#ff7a45" stopOpacity="0.55" />
-                <stop offset="1" stopColor="#ff2d55" stopOpacity="0.05" />
+                <stop offset="0" stopColor="var(--g1)" stopOpacity="0.55" />
+                <stop offset="1" stopColor="var(--g2)" stopOpacity="0.05" />
               </linearGradient>
             </defs>
             <path d={areaPath} fill="url(#elevGrad)" />
-            <path d={linePath} fill="none" stroke="#ff7a45" strokeWidth="1.5" />
+            <path d={linePath} fill="none" stroke="var(--g1)" strokeWidth="1.5" />
           </svg>
           <div className="flex justify-between text-[11px] text-dim">
             <span>◀ ออกเดินทาง</span>

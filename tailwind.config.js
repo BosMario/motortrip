@@ -8,9 +8,9 @@ export default {
         sans: ['Sarabun', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
-        // สปอร์ต accent ไล่เฉดส้ม→แดง
+        // สปอร์ต accent — เปลี่ยนธีมได้ผ่าน CSS var --accent-rgb
         brand: {
-          DEFAULT: '#ff5a1f',
+          DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
           light: '#ff7a45',
           dark: '#e63a12',
         },
@@ -30,7 +30,7 @@ export default {
         label: '0.12em',
       },
       boxShadow: {
-        glow: '0 8px 30px -8px rgba(255,90,31,0.55)',
+        glow: '0 8px 30px -8px rgb(var(--accent-rgb) / 0.55)',
         card: '0 2px 24px -10px rgba(0,0,0,0.8)',
       },
     },

@@ -12,6 +12,10 @@
   --border-strong: rgba(255, 255, 255, 0.14);
   --text: #f2f2f4;
   --dim: #8b8b90;
+  /* accent (เปลี่ยนธีมได้) */
+  --accent-rgb: 255 90 31;
+  --g1: #ff7a45;
+  --g2: #ff2d55;
 }
 
 html,
@@ -74,9 +78,9 @@ button {
     @apply rounded-xl font-semibold tracking-tight transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100;
   }
   .btn-primary {
-    background: linear-gradient(135deg, #ff7a45, #ff2d55);
+    background: linear-gradient(135deg, var(--g1), var(--g2));
     color: #fff;
-    box-shadow: 0 8px 30px -8px rgba(255, 90, 31, 0.55);
+    box-shadow: 0 8px 30px -8px rgb(var(--accent-rgb) / 0.55);
   }
   .btn-white {
     background: #f5f5f7;
@@ -119,10 +123,10 @@ button {
     border: 1px solid var(--border);
   }
   .chip-on {
-    background: linear-gradient(135deg, #ff7a45, #ff2d55);
+    background: linear-gradient(135deg, var(--g1), var(--g2));
     color: #fff;
     border-color: transparent;
-    box-shadow: 0 6px 20px -8px rgba(255, 90, 31, 0.6);
+    box-shadow: 0 6px 20px -8px rgb(var(--accent-rgb) / 0.6);
   }
 }
 

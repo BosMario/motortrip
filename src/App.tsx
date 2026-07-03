@@ -32,9 +32,10 @@ import {
   togglePlace,
   upsertTrip,
 } from './lib/storage'
-import { decodeTripFromUrl, encodeTripToUrl, shareUrl } from './lib/share'
+import { decodeTripFromUrl, encodeTripToUrl, googleDirectionsLink, shareUrl } from './lib/share'
 import { makeAdminKey } from './lib/group'
 import { computeConvoy } from './lib/convoy'
+import { THEMES, loadThemeId, saveThemeId } from './lib/theme'
 import { formatDistance, formatDuration, haversine, uid } from './lib/format'
 import { useDebounced } from './hooks/useDebounced'
 
@@ -121,6 +122,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(() => (readGroupCode() ? 'group' : 'map'))
   const [toast, setToast] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('moto-onboarded-v1'))
+  const [themeId, setThemeId] = useState(loadThemeId)
 
   const group = useGroup()
   const [groupInitialCode] = useState(readGroupCode)
@@ -579,7 +581,7 @@ export default function App() {
             className="flex items-center gap-2 active:scale-95 transition"
             onClick={() => notify(`SAKTECHTRIP v${__APP_VERSION__} · build ${__BUILD_HASH__} · ${__BUILD_DATE__}`)}
           >
-            <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
+            <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}>🏍️</span>
             <span className="font-bold text-sm tracking-tight">SAKTECH<span className="text-brand">TRIP</span></span>
             <span className="text-[9px] text-dim font-medium ml-0.5">v{__APP_VERSION__}</span>
           </button>
@@ -636,7 +638,7 @@ export default function App() {
                     className={`flex-1 rounded-xl py-2.5 text-xs font-semibold border backdrop-blur-xl transition active:scale-95 ${
                       addingPoint ? 'text-white border-transparent shadow-glow' : 'text-white/90 border-white/10 bg-black/60'
                     }`}
-                    style={addingPoint ? { background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' } : undefined}
+                    style={addingPoint ? { background: 'linear-gradient(135deg,var(--g1),var(--g2))' } : undefined}
                   >
                     {addingPoint ? '📌 แตะแผนที่…' : '📌 ปักหมุด'}
                   </button>
@@ -649,7 +651,7 @@ export default function App() {
                   </button>
                 </div>
                 {addingPoint && (
-                  <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>
+                  <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}>
                     แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
                   </p>
                 )}
@@ -663,6 +665,19 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ปุ่มนำทางจริง (ลอยมุมล่างขวา) — ใช้ได้ทุก role เมื่อมีเส้นทาง */}
+        {tab === 'map' && waypoints.length >= 2 && (
+          <a
+            href={googleDirectionsLink(waypoints.map((w) => ({ lat: w.lat, lng: w.lng })))}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-4 right-3 z-[600] rounded-full px-5 py-3 text-sm font-bold text-white shadow-glow flex items-center gap-2 active:scale-95 transition"
+            style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}
+          >
+            🧭 นำทาง
+          </a>
         )}
 
         {/* ── หน้าอื่น ๆ (ทับแผนที่เต็มจอ) ── */}
@@ -794,6 +809,26 @@ export default function App() {
                   <h3 className="label mb-2 px-1">🗺️ ทริปที่บันทึก</h3>
                   <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
                 </div>
+                {/* ธีมสี */}
+                <div className="card p-3 flex flex-col gap-2">
+                  <div className="label">🎨 สีธีม</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {THEMES.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          saveThemeId(t.id)
+                          setThemeId(t.id)
+                        }}
+                        title={t.name}
+                        className={`w-9 h-9 rounded-full transition ${themeId === t.id ? 'ring-2 ring-offset-2 ring-white/70 ring-offset-ink-800' : ''}`}
+                        style={{ background: `linear-gradient(135deg, ${t.g1}, ${t.g2})` }}
+                        aria-label={`ธีม ${t.name}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
                 <SyncPanel trips={savedTrips} places={savedPlaces} onPull={onSyncPull} onNotify={notify} />
                 <button onClick={() => setShowOnboarding(true)} className="btn btn-ghost py-2.5 text-sm">
                   👋 ดูวิธีใช้อีกครั้ง

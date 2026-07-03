@@ -8,18 +8,29 @@ interface Props {
   roundTrip: boolean
 }
 
-const KEY = 'moto-estimate-v1'
+const KEY = 'moto-estimate-v2'
+interface Bike {
+  id: string
+  name: string
+  kmPerLiter: number
+}
 interface Settings {
   depart: string
-  kmPerLiter: number
   pricePerLiter: number
+  bikes: Bike[]
+  activeBikeId: string
 }
 function load(): Settings {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) || '{}')
-    return { depart: s.depart || '07:00', kmPerLiter: s.kmPerLiter || 25, pricePerLiter: s.pricePerLiter || 40 }
+    const s = JSON.parse(localStorage.getItem(KEY) || 'null')
+    if (s && Array.isArray(s.bikes) && s.bikes.length) return s
+    // migrate จาก v1 (คันเดียว)
+    const old = JSON.parse(localStorage.getItem('moto-estimate-v1') || '{}')
+    const b: Bike = { id: 'b1', name: 'รถของฉัน', kmPerLiter: old.kmPerLiter || 25 }
+    return { depart: old.depart || '07:00', pricePerLiter: old.pricePerLiter || 40, bikes: [b], activeBikeId: b.id }
   } catch {
-    return { depart: '07:00', kmPerLiter: 25, pricePerLiter: 40 }
+    const b: Bike = { id: 'b1', name: 'รถของฉัน', kmPerLiter: 25 }
+    return { depart: '07:00', pricePerLiter: 40, bikes: [b], activeBikeId: b.id }
   }
 }
 
@@ -41,9 +52,26 @@ export default function TripEstimate({ route, waypoints, roundTrip }: Props) {
     localStorage.setItem(KEY, JSON.stringify(s))
   }, [s])
 
+  const activeBike = s.bikes.find((b) => b.id === s.activeBikeId) || s.bikes[0]
+  const kmPerLiter = activeBike?.kmPerLiter || 25
   const distanceKm = route ? route.distance / 1000 : 0
-  const liters = s.kmPerLiter > 0 ? distanceKm / s.kmPerLiter : 0
+  const liters = kmPerLiter > 0 ? distanceKm / kmPerLiter : 0
   const cost = liters * s.pricePerLiter
+
+  const setActiveKmPerLiter = (v: number) =>
+    setS((prev) => ({ ...prev, bikes: prev.bikes.map((b) => (b.id === prev.activeBikeId ? { ...b, kmPerLiter: v } : b)) }))
+  const addBike = () => {
+    const name = window.prompt('ชื่อรถ (เช่น CB650R, PCX160):', 'รถคันใหม่')
+    if (name === null) return
+    const id = 'b' + Date.now().toString(36)
+    setS((prev) => ({ ...prev, bikes: [...prev.bikes, { id, name: name.trim() || 'รถคันใหม่', kmPerLiter: 25 }], activeBikeId: id }))
+  }
+  const deleteActiveBike = () =>
+    setS((prev) => {
+      if (prev.bikes.length <= 1) return prev
+      const bikes = prev.bikes.filter((b) => b.id !== prev.activeBikeId)
+      return { ...prev, bikes, activeBikeId: bikes[0].id }
+    })
 
   const hasLegs = !!route && route.legs.length > 0
   const arrivals: { name: string; time: string }[] = []
@@ -80,14 +108,36 @@ export default function TripEstimate({ route, waypoints, roundTrip }: Props) {
             ≈ {liters.toFixed(1)} ลิตร · ระยะ {formatDistance(route.distance)}
           </span>
         </div>
-        <div className="flex gap-2 mt-2.5">
+        {/* เลือกรถ */}
+        <div className="flex gap-1.5 mt-2.5 flex-wrap items-center">
+          <span className="text-xs text-dim">🏍️</span>
+          {s.bikes.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => setS({ ...s, activeBikeId: b.id })}
+              className={`chip px-2.5 py-1 ${b.id === s.activeBikeId ? 'chip-on' : ''}`}
+            >
+              {b.name}
+            </button>
+          ))}
+          <button onClick={addBike} className="chip px-2 py-1">
+            ＋
+          </button>
+          {s.bikes.length > 1 && (
+            <button onClick={deleteActiveBike} className="text-xs text-[#ff6a5f] ml-auto">
+              ลบคันนี้
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-2">
           <div className="field flex-1 flex items-center gap-1.5 px-3 py-2">
-            <span className="text-xs text-dim whitespace-nowrap">รถวิ่งได้</span>
+            <span className="text-xs text-dim whitespace-nowrap">วิ่งได้</span>
             <input
               type="number"
               inputMode="decimal"
-              value={s.kmPerLiter}
-              onChange={(e) => setS({ ...s, kmPerLiter: Number(e.target.value) })}
+              value={kmPerLiter}
+              onChange={(e) => setActiveKmPerLiter(Number(e.target.value))}
               className="w-10 bg-transparent text-center font-bold text-base outline-none"
             />
             <span className="text-xs text-dim whitespace-nowrap">กม./ลิตร</span>

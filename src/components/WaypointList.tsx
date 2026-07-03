@@ -89,7 +89,7 @@ export default function WaypointList({ waypoints, route, readOnly = false, onRem
               )}
               <span
                 className="shrink-0 w-7 h-7 rounded-full text-white text-sm font-bold flex items-center justify-center"
-                style={{ background: w.custom ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}
+                style={{ background: w.custom ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'linear-gradient(135deg,var(--g1),var(--g2))' }}
               >
                 {i + 1}
               </span>

@@ -68,6 +68,26 @@ export function googleMapsLink(lat: number, lng: number): string {
 }
 
 /**
+ * ลิงก์นำทาง Google Maps ทั้งทริป (turn-by-turn)
+ * origin = จุดแรก, destination = จุดสุดท้าย, waypoints = จุดกลาง (Google จำกัด ~9 จุด)
+ */
+export function googleDirectionsLink(wps: { lat: number; lng: number }[]): string {
+  if (wps.length < 2) return ''
+  const o = wps[0]
+  const d = wps[wps.length - 1]
+  const mid = wps.slice(1, -1).slice(0, 8) // จำกัดจุดกลาง 8 จุด
+  const params = new URLSearchParams({
+    api: '1',
+    origin: `${o.lat},${o.lng}`,
+    destination: `${d.lat},${d.lng}`,
+    travelmode: 'driving',
+  })
+  let url = `https://www.google.com/maps/dir/?${params}`
+  if (mid.length) url += `&waypoints=${mid.map((w) => `${w.lat},${w.lng}`).join('%7C')}`
+  return url
+}
+
+/**
  * ลิงก์ค้นร้านบน Google Maps ด้วย "ชื่อร้าน + พิกัด"
  * หน้าที่เปิดจะมีรูปจริง เมนู รีวิว เวลาเปิด-ปิด ของร้านนั้น (ข้อมูลจาก Google)
  */

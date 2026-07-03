@@ -21,7 +21,7 @@ const TripSummary = forwardRef<HTMLDivElement, Props>(({ name, date, waypoints, 
       style={{ background: 'radial-gradient(130% 90% at 0% 0%, #1c1c20 0%, #0d0d0f 60%)' }}
     >
       {/* แถบ accent บนสุด */}
-      <div className="h-1" style={{ background: 'linear-gradient(90deg,#ff7a45,#ff2d55)' }} />
+      <div className="h-1" style={{ background: 'linear-gradient(90deg,var(--g1),var(--g2))' }} />
 
       <div className="px-4 pt-4 pb-3">
         <div className="text-[10px] font-bold uppercase tracking-label text-brand">🏍️ SAKTECHTRIP</div>
@@ -45,7 +45,7 @@ const TripSummary = forwardRef<HTMLDivElement, Props>(({ name, date, waypoints, 
             <li key={w.id} className="flex items-center gap-2.5">
               <span
                 className="w-5 h-5 shrink-0 rounded-full text-[11px] flex items-center justify-center font-bold text-white"
-                style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}
+                style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}
               >
                 {i + 1}
               </span>
