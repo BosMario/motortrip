@@ -38,6 +38,32 @@ export interface SavedPlace extends Poi {
   savedAt: number
 }
 
+/** เส้นทางที่แชร์เข้าห้องกลุ่ม */
+export interface SharedRoute {
+  name: string
+  waypoints: { name: string; lat: number; lng: number }[]
+}
+
+/** ข้อความด่วนในกลุ่ม */
+export interface GroupMessage {
+  id: string
+  name: string
+  color: string
+  emoji: string
+  text: string
+  ts: number
+}
+
+/** การแจ้งเตือน SOS */
+export interface SosAlert {
+  id: string
+  name: string
+  color: string
+  lat?: number | null
+  lng?: number | null
+  ts: number
+}
+
 export interface RouteStep {
   distance: number // เมตร
   duration: number // วินาที

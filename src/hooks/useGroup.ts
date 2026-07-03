@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Rider, RiderProfile } from '../types'
+import type { GroupMessage, Rider, RiderProfile, SharedRoute, SosAlert } from '../types'
 import { GroupClient } from '../lib/group'
 import { useWakeLock } from './useWakeLock'
 
@@ -32,6 +32,9 @@ export function useGroup() {
   const [sharing, setSharing] = useState(false)
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null)
   const [error, setError] = useState('')
+  const [sharedRoute, setSharedRoute] = useState<SharedRoute | null>(null)
+  const [messages, setMessages] = useState<GroupMessage[]>([])
+  const [sos, setSos] = useState<SosAlert | null>(null)
 
   const clientRef = useRef<GroupClient | null>(null)
   const lastPos = useRef<{ lat: number; lng: number; heading?: number | null; speed?: number | null; ts: number } | null>(null)
@@ -47,6 +50,9 @@ export function useGroup() {
     setError('')
     setRidersMap({})
     setMyId(null)
+    setSharedRoute(null)
+    setMessages([])
+    setSos(null)
     setRoomCode(code)
 
     const client = new GroupClient(code, profile, {
@@ -60,6 +66,7 @@ export function useGroup() {
               for (const r of msg.riders || []) if (r?.id) m[r.id] = r
               return m
             })
+            if (msg.route) setSharedRoute(msg.route)
             break
           case 'join':
             if (msg.rider?.id) upsert(msg.rider)
@@ -72,6 +79,15 @@ export function useGroup() {
               const { [msg.id]: _drop, ...rest } = prev
               return rest
             })
+            break
+          case 'route':
+            setSharedRoute(msg.route || null)
+            break
+          case 'msg':
+            setMessages((prev) => [...prev.slice(-29), msg as GroupMessage])
+            break
+          case 'sos':
+            setSos(msg as SosAlert)
             break
         }
       },
@@ -95,6 +111,20 @@ export function useGroup() {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
     clientRef.current?.updateProfile(profile)
   }, [])
+
+  const shareRoute = useCallback((route: SharedRoute) => {
+    clientRef.current?.emit({ type: 'route', route })
+  }, [])
+
+  const sendMessage = useCallback((text: string, emoji = '') => {
+    clientRef.current?.emit({ type: 'msg', text, emoji })
+  }, [])
+
+  const sendSOS = useCallback(() => {
+    clientRef.current?.emit({ type: 'sos' })
+  }, [])
+
+  const dismissSos = useCallback(() => setSos(null), [])
 
   // แชร์ตำแหน่ง: watch GPS + wake lock + throttle + heartbeat
   useEffect(() => {
@@ -161,9 +191,16 @@ export function useGroup() {
     setSharing,
     myPos,
     error,
+    sharedRoute,
+    messages,
+    sos,
     join,
     leave,
     updateProfile,
+    shareRoute,
+    sendMessage,
+    sendSOS,
+    dismissSos,
     wakeActive: wake.active,
     wakeSupported: wake.supported,
   }

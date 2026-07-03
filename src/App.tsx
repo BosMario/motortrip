@@ -71,6 +71,9 @@ export default function App() {
   const group = useGroup()
   const [groupInitialCode] = useState(readGroupCode)
   const [profile] = useState(loadProfile)
+  const [followId, setFollowId] = useState<string | null>(null)
+  const lastMsgTs = useRef(0)
+  const lastSosTs = useRef(0)
 
   const savedKeys = useMemo(() => new Set(savedPlaces.map((p) => placeKey(p))), [savedPlaces])
 
@@ -204,6 +207,52 @@ export default function App() {
     setFocus({ lat: r.lat, lng: r.lng, nonce: Date.now() })
     if (snap === 'full') setSnap('half')
   }
+
+  // ---- ต่อยอดกลุ่มทริป ----
+  const shareMyRoute = () => {
+    if (waypoints.length < 2) return notify('ต้องมีอย่างน้อย 2 จุด')
+    group.shareRoute({
+      name: name || 'เส้นทางกลุ่ม',
+      waypoints: waypoints.map((w) => ({ name: w.name, lat: w.lat, lng: w.lng })),
+    })
+    notify('แชร์เส้นทางให้กลุ่มแล้ว 📤')
+  }
+
+  const useSharedRoute = () => {
+    const r = group.sharedRoute
+    if (!r) return
+    setWaypoints(r.waypoints.map((w) => ({ ...w, id: uid() })))
+    setTab('plan')
+    notify(`ใช้เส้นทาง “${r.name}” แล้ว`)
+  }
+
+  const toggleFollow = (id: string) => setFollowId((prev) => (prev === id ? null : id))
+
+  // แผนที่ตามคันที่เลือก (recenter ทุกครั้งที่ตำแหน่งอัปเดต)
+  useEffect(() => {
+    if (!followId) return
+    const r = group.positioned.find((x) => x.id === followId)
+    if (r && r.lat != null && r.lng != null) setFocus({ lat: r.lat, lng: r.lng, nonce: r.ts || Date.now() })
+  }, [followId, group.positioned])
+
+  // toast ข้อความด่วนจากเพื่อน
+  useEffect(() => {
+    const m = group.messages[group.messages.length - 1]
+    if (!m || m.ts === lastMsgTs.current) return
+    lastMsgTs.current = m.ts
+    if (m.id !== group.myId) notify(`${m.emoji} ${m.name}: ${m.text}`)
+  }, [group.messages, group.myId, notify])
+
+  // แจ้งเตือน SOS
+  useEffect(() => {
+    const s = group.sos
+    if (!s || s.ts === lastSosTs.current) return
+    lastSosTs.current = s.ts
+    if (s.id === group.myId) return notify('ส่งสัญญาณ SOS แล้ว 🆘')
+    notify(`🆘 ${s.name} ขอความช่วยเหลือ!`)
+    if (s.lat != null && s.lng != null) setFocus({ lat: s.lat, lng: s.lng, nonce: s.ts })
+    setTab('group')
+  }, [group.sos, group.myId, notify])
 
   const removePlace = (key: string) => setSavedPlaces(deletePlace(key))
 
@@ -527,14 +576,26 @@ export default function App() {
             wakeSupported={group.wakeSupported}
             defaultProfile={profile}
             initialCode={groupInitialCode}
+            waypointCount={waypoints.length}
+            sharedRoute={group.sharedRoute}
+            messages={group.messages}
+            followId={followId}
             onJoin={(code, prof) => {
               group.join(code, prof)
               notify(`เข้าห้อง ${code} แล้ว`)
             }}
-            onLeave={group.leave}
+            onLeave={() => {
+              setFollowId(null)
+              group.leave()
+            }}
             onToggleShare={group.setSharing}
             onFocusRider={focusRider}
             onNotify={notify}
+            onShareRoute={shareMyRoute}
+            onUseRoute={useSharedRoute}
+            onSendMessage={group.sendMessage}
+            onSOS={group.sendSOS}
+            onToggleFollow={toggleFollow}
           />
         )}
       </BottomSheet>

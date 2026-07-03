@@ -7,11 +7,17 @@
  *   client -> server:
  *     { type:'join', name, color, emoji }
  *     { type:'pos', lat, lng, heading?, speed?, ts }
+ *     { type:'route', route:{ name, waypoints:[{name,lat,lng},...] } }  // แชร์เส้นทางเข้าห้อง
+ *     { type:'msg', text, emoji }                                        // ข้อความด่วน
+ *     { type:'sos' }                                                     // ขอความช่วยเหลือ
  *     { type:'leave' }
  *   server -> client:
- *     { type:'snapshot', you, riders:[...] }      // ส่งให้คนที่เพิ่งเข้า
- *     { type:'join', rider }                        // มีคนใหม่เข้า
+ *     { type:'snapshot', you, riders:[...], route }   // ส่งให้คนที่เพิ่งเข้า (รวมเส้นทางที่แชร์ไว้)
+ *     { type:'join', rider }                          // มีคนใหม่เข้า
  *     { type:'pos', id, lat, lng, heading, speed, ts, name, color, emoji }
+ *     { type:'route', route, setBy }                  // มีคนแชร์เส้นทาง
+ *     { type:'msg', id, name, color, emoji, text, ts }
+ *     { type:'sos', id, name, color, lat, lng, ts }
  *     { type:'leave', id }
  */
 export class GroupRoom {
@@ -63,14 +69,15 @@ export class GroupRoom {
       att.emoji = typeof data.emoji === 'string' ? data.emoji.slice(0, 8) : '🏍️'
       ws.serializeAttachment(att)
 
-      // snapshot ของไรเดอร์คนอื่นที่มีตำแหน่งแล้ว
+      // snapshot ของไรเดอร์คนอื่นที่มีตำแหน่งแล้ว + เส้นทางที่แชร์ไว้ในห้อง
       const riders = []
       for (const other of this.state.getWebSockets()) {
         if (other === ws) continue
         const a = other.deserializeAttachment()
         if (a && a.id) riders.push(a)
       }
-      ws.send(JSON.stringify({ type: 'snapshot', you: att.id, riders }))
+      const route = await this.state.storage.get('route')
+      ws.send(JSON.stringify({ type: 'snapshot', you: att.id, riders, route: route || null }))
       this.broadcast({ type: 'join', rider: att }, ws)
       return
     }
@@ -97,6 +104,52 @@ export class GroupRoom {
         },
         ws
       )
+      return
+    }
+
+    if (data.type === 'route') {
+      // จำกัดขนาด: ชื่อ + จุดแวะ (กันข้อมูลใหญ่เกิน)
+      const r = data.route || {}
+      const route = {
+        name: String(r.name || 'เส้นทางกลุ่ม').slice(0, 60),
+        waypoints: Array.isArray(r.waypoints)
+          ? r.waypoints.slice(0, 30).map((w) => ({
+              name: String(w.name || '').slice(0, 80),
+              lat: Number(w.lat),
+              lng: Number(w.lng),
+            }))
+          : [],
+      }
+      await this.state.storage.put('route', route)
+      this.broadcast({ type: 'route', route, setBy: att.name }) // ส่งให้ทุกคนรวมคนแชร์
+      return
+    }
+
+    if (data.type === 'msg') {
+      const text = String(data.text || '').slice(0, 120)
+      if (!text) return
+      this.broadcast({
+        type: 'msg',
+        id: att.id,
+        name: att.name,
+        color: att.color,
+        emoji: typeof data.emoji === 'string' ? data.emoji.slice(0, 8) : '',
+        text,
+        ts: Date.now(),
+      })
+      return
+    }
+
+    if (data.type === 'sos') {
+      this.broadcast({
+        type: 'sos',
+        id: att.id,
+        name: att.name,
+        color: att.color,
+        lat: att.lat,
+        lng: att.lng,
+        ts: Date.now(),
+      })
       return
     }
 

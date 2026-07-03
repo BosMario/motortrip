@@ -101,6 +101,11 @@ export class GroupClient {
     this.send({ type: 'pos', ...pos })
   }
 
+  /** ส่งข้อความ/เส้นทาง/SOS เข้าห้อง */
+  emit(obj: Record<string, unknown>) {
+    this.send(obj)
+  }
+
   private send(obj: unknown) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(obj))

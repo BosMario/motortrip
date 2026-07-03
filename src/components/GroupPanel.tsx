@@ -1,11 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Rider, RiderProfile } from '../types'
+import type { GroupMessage, Rider, RiderProfile, SharedRoute } from '../types'
 import { formatDistance, haversine } from '../lib/format'
 import { makeRoomCode } from '../lib/group'
 import { shareUrl } from '../lib/share'
 
 const EMOJIS = ['🏍️', '🛵', '🏁', '🔥', '⚡', '🦅', '🐆', '🐺', '🌟', '🎯']
 const COLORS = ['#ea580c', '#2563eb', '#16a34a', '#db2777', '#9333ea', '#0d9488', '#d97706', '#dc2626']
+
+/** ข้อความด่วนสำเร็จรูป (มือไม่ต้องพิมพ์ตอนขับ) */
+const QUICK_MSGS: { text: string; emoji: string }[] = [
+  { emoji: '🛢️', text: 'แวะปั๊ม' },
+  { emoji: '☕', text: 'แวะพัก' },
+  { emoji: '🖐️', text: 'รอด้วย' },
+  { emoji: '🏍️', text: 'ไปต่อ' },
+  { emoji: '👍', text: 'โอเค' },
+  { emoji: '🍜', text: 'หิวข้าว' },
+  { emoji: '⚠️', text: 'ระวังทาง' },
+  { emoji: '🚻', text: 'เข้าห้องน้ำ' },
+]
 
 interface Props {
   roomCode: string | null
@@ -19,11 +31,21 @@ interface Props {
   wakeSupported: boolean
   defaultProfile: RiderProfile
   initialCode: string
+  // ต่อยอดกลุ่ม
+  waypointCount: number
+  sharedRoute: SharedRoute | null
+  messages: GroupMessage[]
+  followId: string | null
   onJoin: (code: string, profile: RiderProfile) => void
   onLeave: () => void
   onToggleShare: (on: boolean) => void
   onFocusRider: (r: Rider) => void
   onNotify: (msg: string) => void
+  onShareRoute: () => void
+  onUseRoute: () => void
+  onSendMessage: (text: string, emoji: string) => void
+  onSOS: () => void
+  onToggleFollow: (id: string) => void
 }
 
 export default function GroupPanel({
@@ -38,11 +60,20 @@ export default function GroupPanel({
   wakeSupported,
   defaultProfile,
   initialCode,
+  waypointCount,
+  sharedRoute,
+  messages,
+  followId,
   onJoin,
   onLeave,
   onToggleShare,
   onFocusRider,
   onNotify,
+  onShareRoute,
+  onUseRoute,
+  onSendMessage,
+  onSOS,
+  onToggleFollow,
 }: Props) {
   const [name, setName] = useState(defaultProfile.name)
   const [emoji, setEmoji] = useState(defaultProfile.emoji)
@@ -196,6 +227,73 @@ export default function GroupPanel({
       )}
       {error && <p className="text-xs text-[#ff6a5f] bg-[#ff3b30]/10 border border-[#ff3b30]/25 rounded-lg px-3 py-2">⚠️ {error}</p>}
 
+      {/* เส้นทางกลุ่ม */}
+      <div className="card p-3 flex flex-col gap-2">
+        <div className="label">เส้นทางกลุ่ม</div>
+        {sharedRoute ? (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">🗺️ {sharedRoute.name}</div>
+              <div className="text-xs text-dim">{sharedRoute.waypoints.length} จุดแวะ</div>
+            </div>
+            <button onClick={onUseRoute} className="btn btn-ghost text-xs px-3 py-2 whitespace-nowrap">
+              ใช้เส้นทางนี้
+            </button>
+          </div>
+        ) : (
+          <div className="text-xs text-dim">ยังไม่มีใครแชร์เส้นทาง</div>
+        )}
+        <button
+          onClick={onShareRoute}
+          disabled={waypointCount < 2}
+          className="btn btn-ghost w-full py-2 text-xs disabled:opacity-40"
+        >
+          📤 แชร์เส้นทางของฉันให้กลุ่ม{waypointCount >= 2 ? ` (${waypointCount} จุด)` : ' (ต้องมี ≥2 จุด)'}
+        </button>
+      </div>
+
+      {/* ข้อความด่วน */}
+      <div className="card p-3 flex flex-col gap-2">
+        <div className="label">ส่งข้อความด่วน</div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {QUICK_MSGS.map((m) => (
+            <button
+              key={m.text}
+              onClick={() => onSendMessage(m.text, m.emoji)}
+              className="btn btn-ghost text-[11px] py-2 leading-tight flex flex-col items-center gap-0.5"
+            >
+              <span className="text-base leading-none">{m.emoji}</span>
+              {m.text}
+            </button>
+          ))}
+        </div>
+        {messages.length > 0 && (
+          <ul className="flex flex-col gap-1 mt-1 max-h-28 overflow-y-auto no-scrollbar">
+            {messages.slice(-6).map((m, i) => (
+              <li key={`${m.ts}-${i}`} className="text-xs flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: m.color }} />
+                <span className="font-medium truncate" style={{ maxWidth: '35%' }}>
+                  {m.name}
+                </span>
+                <span className="text-dim truncate">
+                  {m.emoji} {m.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* SOS */}
+      <button
+        onClick={() => {
+          if (window.confirm('ส่งสัญญาณ SOS + ตำแหน่งฉันให้ทุกคนในห้อง?')) onSOS()
+        }}
+        className="btn w-full py-2.5 text-sm font-bold border border-[#ff3b30]/40 text-[#ff6a5f] bg-[#ff3b30]/10"
+      >
+        🆘 ขอความช่วยเหลือ (SOS)
+      </button>
+
       {/* รายชื่อไรเดอร์ */}
       <div>
         <div className="label mb-2 px-1">ไรเดอร์ในห้อง ({roster.length})</div>
@@ -234,10 +332,28 @@ export default function GroupPanel({
                               ? 'กำลังแชร์'
                               : 'ยังไม่ได้แชร์'
                             : `เห็นล่าสุด ${ago ?? 0} วิที่แล้ว`}
-                      {dist != null && ` · ห่าง ${formatDistance(dist)}`}
+                      {dist != null && (
+                        <span className={dist > 2000 ? 'text-[#ff6a5f] font-medium' : ''}>
+                          {' · '}
+                          {dist > 2000 ? '⚠️ ห่าง ' : 'ห่าง '}
+                          {formatDistance(dist)}
+                        </span>
+                      )}
                       {r.speed != null && r.speed > 0.5 && ` · ${Math.round(r.speed * 3.6)} กม./ชม.`}
                     </div>
                   </div>
+                  {!me && positioned && (
+                    <button
+                      onClick={() => onToggleFollow(r.id)}
+                      className={`w-8 h-8 shrink-0 rounded-lg text-sm transition active:scale-95 ${
+                        followId === r.id ? 'chip-on' : 'btn-ghost'
+                      }`}
+                      aria-label="ตามคันนี้"
+                      title="ตามคันนี้บนแผนที่"
+                    >
+                      🎯
+                    </button>
+                  )}
                   <span
                     className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                       positioned && !stale ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-white/20'
