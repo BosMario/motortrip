@@ -6,6 +6,8 @@ export interface Waypoint {
   /** true = จุดที่ผู้ใช้ปักเอง (custom POI) */
   custom?: boolean
   note?: string
+  /** true = ค้างคืนที่จุดนี้ → จุดถัดไปเป็นวันใหม่ */
+  overnight?: boolean
 }
 
 export type PoiKind = 'cafe' | 'restaurant' | 'fuel' | 'charging'

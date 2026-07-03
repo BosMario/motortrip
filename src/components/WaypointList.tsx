@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import type { RouteData, Waypoint } from '../types'
 import { formatDistance } from '../lib/format'
 
@@ -8,9 +8,10 @@ interface Props {
   readOnly?: boolean
   onRemove: (id: string) => void
   onReorder: (from: number, to: number) => void
+  onToggleOvernight?: (id: string) => void
 }
 
-export default function WaypointList({ waypoints, route, readOnly = false, onRemove, onReorder }: Props) {
+export default function WaypointList({ waypoints, route, readOnly = false, onRemove, onReorder, onToggleOvernight }: Props) {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [overIdx, setOverIdx] = useState<number | null>(null)
   const itemRefs = useRef<(HTMLLIElement | null)[]>([])
@@ -51,51 +52,81 @@ export default function WaypointList({ waypoints, route, readOnly = false, onRem
     setOverIdx(null)
   }
 
+  // แบ่งวัน: จุดที่ overnight = ค้างคืน → จุดถัดไปเป็นวันใหม่
+  let d = 1
+  const dayOf = waypoints.map((w) => {
+    const cur = d
+    if (w.overnight) d++
+    return cur
+  })
+  const totalDays = dayOf.length ? dayOf[dayOf.length - 1] : 1
+
   return (
     <ol className="flex flex-col gap-2">
-      {waypoints.map((w, i) => (
-        <li
-          key={w.id}
-          ref={(el) => (itemRefs.current[i] = el)}
-          className={`card-2 flex items-center gap-2 p-2.5 transition ${
-            dragIdx === i ? 'opacity-60 scale-[0.98] ring-1 ring-brand' : ''
-          } ${overIdx === i && dragIdx !== null && dragIdx !== i ? 'ring-1 ring-brand/60' : ''}`}
-        >
-          {/* grip ลากเพื่อสลับลำดับ */}
-          {!readOnly && (
-            <button
-              onPointerDown={onGripDown(i)}
-              onPointerMove={onGripMove}
-              onPointerUp={onGripUp}
-              className="shrink-0 w-7 h-9 -ml-1 flex items-center justify-center text-dim touch-none cursor-grab active:cursor-grabbing"
-              aria-label="ลากเพื่อสลับลำดับ"
-            >
-              ⠿
-            </button>
-          )}
-          <span
-            className="shrink-0 w-7 h-7 rounded-full text-white text-sm font-bold flex items-center justify-center"
-            style={{ background: w.custom ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}
-          >
-            {i + 1}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium truncate">{w.name}</div>
-            {route && i > 0 && route.legs[i - 1] && (
-              <div className="text-xs text-dim">↳ ห่างจากจุดก่อน {formatDistance(route.legs[i - 1].distance)}</div>
+      {waypoints.map((w, i) => {
+        const showDayHeader = totalDays > 1 && (i === 0 || dayOf[i] !== dayOf[i - 1])
+        return (
+          <Fragment key={w.id}>
+            {showDayHeader && (
+              <li className="text-xs font-bold text-brand pt-1 first:pt-0">🗓️ วันที่ {dayOf[i]}</li>
             )}
-          </div>
-          {!readOnly && (
-            <button
-              onClick={() => onRemove(w.id)}
-              className="w-9 h-9 shrink-0 rounded-lg btn-danger text-sm active:scale-95 transition"
-              aria-label="ลบจุด"
+            <li
+              ref={(el) => (itemRefs.current[i] = el)}
+              className={`card-2 flex items-center gap-2 p-2.5 transition ${
+                dragIdx === i ? 'opacity-60 scale-[0.98] ring-1 ring-brand' : ''
+              } ${overIdx === i && dragIdx !== null && dragIdx !== i ? 'ring-1 ring-brand/60' : ''}`}
             >
-              🗑
-            </button>
-          )}
-        </li>
-      ))}
+              {!readOnly && (
+                <button
+                  onPointerDown={onGripDown(i)}
+                  onPointerMove={onGripMove}
+                  onPointerUp={onGripUp}
+                  className="shrink-0 w-7 h-9 -ml-1 flex items-center justify-center text-dim touch-none cursor-grab active:cursor-grabbing"
+                  aria-label="ลากเพื่อสลับลำดับ"
+                >
+                  ⠿
+                </button>
+              )}
+              <span
+                className="shrink-0 w-7 h-7 rounded-full text-white text-sm font-bold flex items-center justify-center"
+                style={{ background: w.custom ? 'linear-gradient(135deg,#a855f7,#6d28d9)' : 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}
+              >
+                {i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  {w.name}
+                  {w.overnight && <span className="ml-1.5 text-xs">🌙</span>}
+                </div>
+                {route && i > 0 && route.legs[i - 1] && (
+                  <div className="text-xs text-dim">↳ ห่างจากจุดก่อน {formatDistance(route.legs[i - 1].distance)}</div>
+                )}
+              </div>
+              {!readOnly && onToggleOvernight && i < waypoints.length - 1 && (
+                <button
+                  onClick={() => onToggleOvernight(w.id)}
+                  className={`w-9 h-9 shrink-0 rounded-lg text-sm active:scale-95 transition ${
+                    w.overnight ? 'chip-on' : 'bg-white/[0.06] border border-white/10'
+                  }`}
+                  aria-label="ค้างคืนที่จุดนี้"
+                  title="ค้างคืนที่จุดนี้ (ขึ้นวันใหม่)"
+                >
+                  🌙
+                </button>
+              )}
+              {!readOnly && (
+                <button
+                  onClick={() => onRemove(w.id)}
+                  className="w-9 h-9 shrink-0 rounded-lg btn-danger text-sm active:scale-95 transition"
+                  aria-label="ลบจุด"
+                >
+                  🗑
+                </button>
+              )}
+            </li>
+          </Fragment>
+        )
+      })}
     </ol>
   )
 }

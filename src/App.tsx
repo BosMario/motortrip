@@ -142,6 +142,9 @@ export default function App() {
   // emoji อากาศเรียงตาม waypoints (ไว้โชว์บนหมุดแผนที่)
   const weatherEmojis = useMemo(() => weather.map((w) => (w.available ? w.emoji : undefined)), [weather])
 
+  // จำนวนวันของทริป (นับจากจุดค้างคืน)
+  const totalDays = useMemo(() => 1 + waypoints.slice(0, -1).filter((w) => w.overnight).length, [waypoints])
+
   // สถิติจากทริปที่บันทึก
   const stats = useMemo(
     () => ({
@@ -303,6 +306,9 @@ export default function App() {
   }
 
   const removeWaypoint = (id: string) => setWaypoints((prev) => prev.filter((w) => w.id !== id))
+
+  const toggleOvernight = (id: string) =>
+    setWaypoints((prev) => prev.map((w) => (w.id === id ? { ...w, overnight: !w.overnight } : w)))
 
   const reorderWaypoints = (from: number, to: number) =>
     setWaypoints((prev) => {
@@ -580,10 +586,12 @@ export default function App() {
               <span className="font-bold text-sm">{formatDistance(route.distance)}</span>
               <span className="text-dim">·</span>
               <span className="font-bold text-sm">{formatDuration(route.duration, true)}</span>
-              <span className="text-dim">· {waypoints.length} จุด</span>
+              <span className="text-dim">· {totalDays > 1 ? `${totalDays} วัน · ` : ''}{waypoints.length} จุด</span>
             </div>
           ) : (
-            <span className="text-xs text-dim">{routeLoading ? 'กำลังคำนวณเส้นทาง…' : `${waypoints.length} จุดแวะ`}</span>
+            <span className="text-xs text-dim">
+              {routeLoading ? 'กำลังคำนวณเส้นทาง…' : `${totalDays > 1 ? `${totalDays} วัน · ` : ''}${waypoints.length} จุดแวะ`}
+            </span>
           )}
         </div>
       </header>
@@ -676,10 +684,17 @@ export default function App() {
                     </span>
                   </button>
                 )}
-                <WaypointList waypoints={waypoints} route={route} readOnly={!canEdit} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
+                <WaypointList
+                  waypoints={waypoints}
+                  route={route}
+                  readOnly={!canEdit}
+                  onRemove={removeWaypoint}
+                  onReorder={reorderWaypoints}
+                  onToggleOvernight={toggleOvernight}
+                />
                 {canEdit && (
                   <p className="text-[11px] text-dim text-center px-2 leading-relaxed">
-                    เพิ่มจุดแวะได้ที่แท็บ “🗺️ แผนที่” (ค้นหา / ปักหมุด / ตำแหน่งฉัน)<br />ลาก ⠿ เพื่อสลับลำดับ
+                    เพิ่มจุดแวะที่แท็บ “🗺️ แผนที่” · ลาก ⠿ สลับลำดับ · แตะ 🌙 = ค้างคืน (ขึ้นวันใหม่)
                   </p>
                 )}
               </div>
