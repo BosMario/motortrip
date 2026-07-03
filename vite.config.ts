@@ -57,6 +57,16 @@ export default defineConfig({
               expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 },
             },
           },
+          {
+            // Open-Meteo: พยากรณ์ล่าสุดใช้ต่อได้ตอนหลุด
+            urlPattern: /^https:\/\/api\.open-meteo\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'weather',
+              networkTimeoutSeconds: 6,
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 3 },
+            },
+          },
         ],
       },
       devOptions: { enabled: false }, // เปิด SW เฉพาะ production

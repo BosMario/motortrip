@@ -8,6 +8,8 @@ import SavedTrips from './components/SavedTrips'
 import PoiList from './components/PoiList'
 import SavedPlaces from './components/SavedPlaces'
 import GroupPanel from './components/GroupPanel'
+import WeatherPanel from './components/WeatherPanel'
+import { fetchTripWeather, type WeatherPoint } from './lib/weather'
 import { useGroup, loadProfile } from './hooks/useGroup'
 import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from './types'
 import { fetchRoute } from './lib/osrm'
@@ -66,6 +68,11 @@ export default function App() {
   const [roundTrip, setRoundTrip] = useState(false)
   const [locating, setLocating] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [weather, setWeather] = useState<WeatherPoint[]>([])
+  const [weatherLoading, setWeatherLoading] = useState(false)
+  const [weatherError, setWeatherError] = useState('')
+  const [weatherUsedToday, setWeatherUsedToday] = useState(false)
+  const weatherCtrl = useRef<AbortController | null>(null)
   const summaryRef = useRef<HTMLDivElement>(null)
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisteredSW(_url, reg) {
@@ -235,6 +242,28 @@ export default function App() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     )
+  }
+
+  const fetchWeather = async () => {
+    if (waypoints.length === 0) return notify('เพิ่มจุดแวะก่อนนะ')
+    weatherCtrl.current?.abort()
+    const ac = new AbortController()
+    weatherCtrl.current = ac
+    setWeatherLoading(true)
+    setWeatherError('')
+    try {
+      const { points, usedToday } = await fetchTripWeather(
+        waypoints.map((w) => ({ name: w.name, lat: w.lat, lng: w.lng })),
+        date,
+        ac.signal
+      )
+      setWeather(points)
+      setWeatherUsedToday(usedToday)
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setWeatherError('ดึงพยากรณ์อากาศไม่สำเร็จ ลองใหม่')
+    } finally {
+      setWeatherLoading(false)
+    }
   }
 
   const exportSummary = async () => {
@@ -637,6 +666,15 @@ export default function App() {
             <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
               {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
             </button>
+
+            <WeatherPanel
+              points={weather}
+              loading={weatherLoading}
+              error={weatherError}
+              usedToday={weatherUsedToday}
+              hasWaypoints={waypoints.length > 0}
+              onFetch={fetchWeather}
+            />
 
             <div className="grid grid-cols-2 gap-2">
               <button onClick={saveTrip} className="btn btn-primary py-3">
