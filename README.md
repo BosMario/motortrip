@@ -85,6 +85,30 @@ VITE_GROUP_WS=wss://moto-trip-group.<subdomain>.workers.dev
 
 > **หมายเหตุ iOS:** PWA บน iPhone ติดตามตำแหน่งได้เฉพาะตอนเปิดแอปค้างหน้าจอ (iOS suspend JS/GPS เมื่อแอปอยู่พื้นหลัง) — แอปใช้ **Screen Wake Lock** กันจอดับให้อัตโนมัติระหว่างแชร์ตำแหน่ง แนะนำตั้งมือถือบนแฮนด์และเปิดแอปทิ้งไว้
 
+### Offline (PWA / Service Worker)
+
+ใช้ `vite-plugin-pwa` (Workbox) — precache app shell + cache runtime ให้ใช้งานตอนสัญญาณหลุด:
+
+- 🗺️ **แผนที่ OSM tiles** — CacheFirst (เก็บ tile ที่เคยโหลด ~30 วัน)
+- 🔤 **Google Fonts** — cache ไฟล์ฟอนต์
+- 🧭 **เส้นทาง OSRM** — NetworkFirst (เส้นทางล่าสุดใช้ต่อได้ตอนหลุด)
+- 📱 app shell (JS/CSS/HTML/icons) precache → เปิดแอปได้แบบ offline
+
+Service worker เปิดเฉพาะ production build (`registerType: autoUpdate` → อัปเดตเองเมื่อ deploy ใหม่)
+
+### Auto-deploy (GitHub Actions)
+
+ทุก push ขึ้น `main` จะ build แล้ว deploy **ทั้ง Worker และ Pages** อัตโนมัติ (`.github/workflows/deploy.yml`)
+
+ต้องตั้ง 2 secrets ใน GitHub repo (**Settings → Secrets and variables → Actions → New repository secret**):
+
+| Secret | ค่า |
+|--------|-----|
+| `CLOUDFLARE_API_TOKEN` | สร้างที่ Cloudflare → My Profile → API Tokens → Create Token (perms: **Workers Scripts: Edit**, **Cloudflare Pages: Edit**, **Account Settings: Read**) |
+| `CLOUDFLARE_ACCOUNT_ID` | `ef8385574695c8f0f208804d81c5e23c` (จาก `npx wrangler whoami`) |
+
+live: **https://moto-trip-planner.pages.dev** · backend: **https://moto-trip-group.thanachai-bos.workers.dev**
+
 ## ติดตั้งบน iPhone (Add to Home Screen)
 
 1. เปิดเว็บที่ deploy แล้วใน **Safari**
