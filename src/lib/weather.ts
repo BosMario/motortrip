@@ -127,6 +127,80 @@ export async function fetchRouteWeather(
   })
 }
 
+export interface RideDay {
+  date: string // ISO YYYY-MM-DD
+  dow: string // ชื่อวัน ไทย
+  emoji: string
+  label: string
+  tempMax?: number
+  tempMin?: number
+  rainProb?: number
+  windMax?: number
+  score: number // 0–100 ยิ่งสูงยิ่งเหมาะขับ
+  rating: string
+}
+
+const THAI_DOW = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.']
+
+/** ให้คะแนน "ความเหมาะสมในการขับ" จากอากาศรายวัน (ฝนคือปัจจัยหลัก) */
+function rideScore(code: number, rainProb: number, windMax: number, tempMax: number): number {
+  let s = 100
+  s -= rainProb * 0.6 // ฝน 100% → -60
+  if (code >= 95) s -= 30 // พายุฝนฟ้าคะนอง
+  else if (code >= 80) s -= 12 // ฝนเป็นช่วง
+  else if (code >= 61) s -= 15 // ฝนตก
+  else if (code >= 51) s -= 6 // ฝนปรอย
+  else if (code === 45 || code === 48) s -= 8 // หมอก
+  else if (code === 0 || code === 1) s += 4 // แจ่มใส
+  if (windMax > 30) s -= (windMax - 30) * 0.8 // ลมแรง
+  if (tempMax > 38) s -= (tempMax - 38) * 2 // ร้อนจัด
+  if (tempMax < 12) s -= (12 - tempMax) * 1.5 // หนาวจัด
+  return Math.max(0, Math.min(100, Math.round(s)))
+}
+
+function rating(score: number): string {
+  if (score >= 80) return 'ดีเยี่ยม'
+  if (score >= 62) return 'ดี'
+  if (score >= 42) return 'พอได้'
+  return 'ควรเลี่ยง'
+}
+
+/** พยากรณ์ 7 วันข้างหน้า ณ จุดเริ่มทริป + ให้คะแนนว่าวันไหนเหมาะขับที่สุด (ฟรี) */
+export async function fetchRideDays(lat: number, lng: number, signal?: AbortSignal): Promise<RideDay[]> {
+  const params = new URLSearchParams({
+    latitude: lat.toFixed(4),
+    longitude: lng.toFixed(4),
+    daily: 'weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max',
+    timezone: 'Asia/Bangkok',
+    forecast_days: '7',
+  })
+  const res = await fetch(`${OPEN_METEO}?${params}`, { signal })
+  if (!res.ok) throw new Error(`ดึงพยากรณ์ 7 วันไม่สำเร็จ (${res.status})`)
+  const data = await res.json()
+  const d = data.daily
+  if (!d || !d.time?.length) return []
+  return d.time.map((date: string, i: number): RideDay => {
+    const code = d.weathercode?.[i] ?? 3
+    const rainProb = d.precipitation_probability_max?.[i] ?? 0
+    const windMax = d.windspeed_10m_max?.[i] ?? 0
+    const tempMax = d.temperature_2m_max?.[i] ?? 30
+    const [emoji, label] = wmo(code)
+    const score = rideScore(code, rainProb, windMax, tempMax)
+    return {
+      date,
+      dow: THAI_DOW[new Date(date + 'T00:00:00').getDay()],
+      emoji,
+      label,
+      tempMax,
+      tempMin: d.temperature_2m_min?.[i],
+      rainProb,
+      windMax,
+      score,
+      rating: rating(score),
+    }
+  })
+}
+
 /**
  * พยากรณ์อากาศรายจุดตามเส้นทาง (Open-Meteo — ฟรี ไม่ต้องมี key)
  * ยิงหลายจุดในคำขอเดียวด้วยพิกัดคั่น comma

@@ -11,6 +11,7 @@ import WeatherPanel from './components/WeatherPanel'
 import WeatherRoute from './components/WeatherRoute'
 import TripEstimate from './components/TripEstimate'
 import ElevationProfile from './components/ElevationProfile'
+import RideDays from './components/RideDays'
 import SyncPanel from './components/SyncPanel'
 import Onboarding from './components/Onboarding'
 import { fetchTripWeather, type WeatherPoint } from './lib/weather'
@@ -980,6 +981,15 @@ export default function App() {
                     <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={!canEdit} className="field px-3 py-2.5 text-sm normal-case tracking-normal disabled:opacity-60" />
                   </label>
                 </div>
+                {waypoints[0] && (
+                  <RideDays
+                    lat={waypoints[0].lat}
+                    lng={waypoints[0].lng}
+                    startName={waypoints[0].name}
+                    tripDate={date}
+                    onPickDate={canEdit ? setDate : undefined}
+                  />
+                )}
                 <WeatherPanel points={weather} loading={weatherLoading} error={weatherError} usedToday={weatherUsedToday} hasWaypoints={waypoints.length > 0} onFetch={fetchWeather} />
                 <TripEstimate route={route} waypoints={waypoints} roundTrip={roundTrip} />
                 {route && (
