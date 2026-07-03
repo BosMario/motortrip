@@ -8,6 +8,8 @@ import PoiList from './components/PoiList'
 import SavedPlaces from './components/SavedPlaces'
 import GroupPanel from './components/GroupPanel'
 import WeatherPanel from './components/WeatherPanel'
+import TripEstimate from './components/TripEstimate'
+import ElevationProfile from './components/ElevationProfile'
 import { fetchTripWeather, type WeatherPoint } from './lib/weather'
 import { useGroup, loadProfile } from './hooks/useGroup'
 import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from './types'
@@ -688,6 +690,8 @@ export default function App() {
                   </label>
                 </div>
                 <WeatherPanel points={weather} loading={weatherLoading} error={weatherError} usedToday={weatherUsedToday} hasWaypoints={waypoints.length > 0} onFetch={fetchWeather} />
+                <TripEstimate route={route} waypoints={waypoints} roundTrip={roundTrip} />
+                <ElevationProfile routeCoords={route?.coordinates ?? []} />
                 <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
                 <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
                   {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
