@@ -73,6 +73,7 @@ export default function App() {
   const [weatherError, setWeatherError] = useState('')
   const [weatherUsedToday, setWeatherUsedToday] = useState(false)
   const weatherCtrl = useRef<AbortController | null>(null)
+  const weatherKey = useRef('')
   const summaryRef = useRef<HTMLDivElement>(null)
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisteredSW(_url, reg) {
@@ -265,6 +266,16 @@ export default function App() {
       setWeatherLoading(false)
     }
   }
+
+  // โหลดพยากรณ์อัตโนมัติเมื่อเปิดแท็บสรุป / เปลี่ยนวัน-จุดแวะ (ไม่ต้องกดหาเอง)
+  useEffect(() => {
+    if (tab !== 'summary' || waypoints.length === 0) return
+    const key = date + '|' + waypoints.map((w) => `${w.lat},${w.lng}`).join(';')
+    if (key === weatherKey.current) return
+    weatherKey.current = key
+    fetchWeather()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, date, waypoints])
 
   const exportSummary = async () => {
     if (!summaryRef.current) return
@@ -661,12 +672,6 @@ export default function App() {
               </label>
             </div>
 
-            <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
-
-            <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
-              {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
-            </button>
-
             <WeatherPanel
               points={weather}
               loading={weatherLoading}
@@ -675,6 +680,12 @@ export default function App() {
               hasWaypoints={waypoints.length > 0}
               onFetch={fetchWeather}
             />
+
+            <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
+
+            <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
+              {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
+            </button>
 
             <div className="grid grid-cols-2 gap-2">
               <button onClick={saveTrip} className="btn btn-primary py-3">
