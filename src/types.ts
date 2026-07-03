@@ -27,6 +27,12 @@ export interface Poi {
   image?: string
   address?: string
   brand?: string
+  /** ค่า tag wikimedia_commons (File:.. หรือ Category:..) สำหรับดึงรูปฟรี */
+  commons?: string
+  /** รหัส Wikidata (Q…) สำหรับดึงรูป P18 ฟรี */
+  wikidata?: string
+  /** จุดเด่นร้าน (นั่งนอก/ที่จอด/wifi/แอร์ ฯลฯ) เป็นข้อความไทยสั้น ๆ */
+  features?: string[]
   /** true = มี wikidata/wikipedia (เป็นที่รู้จัก) */
   notable?: boolean
   /** คะแนนประเมิน "ความนิยม" จากความครบถ้วนของข้อมูล OSM (proxy) */

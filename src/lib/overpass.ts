@@ -77,6 +77,23 @@ function prettyCuisine(v?: string): string | undefined {
     .join(', ')
 }
 
+/** ดึงจุดเด่นร้านจากแท็ก OSM → ข้อความไทยสั้น ๆ (สำหรับโชว์เป็นชิป) */
+function buildFeatures(t: Tags): string[] {
+  const f: string[] = []
+  const yes = (v?: string) => v === 'yes'
+  if (yes(t.outdoor_seating)) f.push('🌳 นั่งนอกได้')
+  if (yes(t.air_conditioning)) f.push('❄️ แอร์')
+  if (t.internet_access === 'wlan' || yes(t.internet_access)) f.push('📶 Wi-Fi')
+  if (yes(t.takeaway) || t.takeaway === 'only') f.push('🥡 ซื้อกลับ')
+  if (yes(t.delivery)) f.push('🛵 เดลิเวอรี')
+  if (yes(t.drive_through)) f.push('🚗 ไดรฟ์ทรู')
+  if (yes(t['diet:vegetarian']) || yes(t['diet:vegan'])) f.push('🥗 มังสวิรัติ')
+  if (t.wheelchair === 'yes') f.push('♿ รองรับวีลแชร์')
+  if (yes(t.parking) || t['amenity'] === 'fuel') f.push('🅿️ มีที่จอด')
+  if (t.smoking === 'no') f.push('🚭 ปลอดบุหรี่')
+  return f
+}
+
 function buildAddress(t: Tags): string | undefined {
   const parts = [
     t['addr:housenumber'],
@@ -175,6 +192,9 @@ export async function fetchPois(
       website: t.website || t['contact:website'],
       phone: t.phone || t['contact:phone'],
       image: t.image && /^https?:\/\//.test(t.image) ? t.image : undefined,
+      commons: t.wikimedia_commons,
+      wikidata: t.wikidata,
+      features: buildFeatures(t),
       address: buildAddress(t),
       brand: t.brand,
       notable: !!(t.wikidata || t.wikipedia),

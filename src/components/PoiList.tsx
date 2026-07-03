@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Poi } from '../types'
 import { formatDistance } from '../lib/format'
 import { googleMapsLink, googlePlaceLink } from '../lib/share'
 import { placeKey } from '../lib/storage'
 import { KIND_META } from '../lib/poiMeta'
+import { instantPhoto, resolvePhoto } from '../lib/poiPhoto'
 
 interface Props {
   pois: Poi[]
@@ -14,17 +15,30 @@ interface Props {
 }
 
 function Thumb({ poi }: { poi: Poi }) {
+  const [src, setSrc] = useState<string | null>(() => instantPhoto(poi))
   const [broken, setBroken] = useState(false)
   const meta = KIND_META[poi.kind]
-  if (poi.image && !broken) {
+
+  // ถ้าไม่มีรูปทันที แต่มี wikidata → ลองดึงรูปฟรีจาก Wikimedia
+  useEffect(() => {
+    if (src || !poi.wikidata) return
+    const ac = new AbortController()
+    resolvePhoto(poi, ac.signal).then((u) => u && setSrc(u))
+    return () => ac.abort()
+  }, [poi, src])
+
+  if (src && !broken) {
     return (
-      <img
-        src={poi.image}
-        alt={poi.name}
-        loading="lazy"
-        onError={() => setBroken(true)}
-        className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-200 dark:bg-slate-700"
-      />
+      <div className="relative w-16 h-16 shrink-0">
+        <img
+          src={src}
+          alt={poi.name}
+          loading="lazy"
+          onError={() => setBroken(true)}
+          className="w-16 h-16 rounded-xl object-cover bg-slate-200 dark:bg-slate-700"
+        />
+        <span className="absolute bottom-0.5 right-0.5 text-[10px]">{meta.emoji}</span>
+      </div>
     )
   }
   return (
@@ -63,6 +77,7 @@ export default function PoiList({ pois, savedKeys, onToggleSave, onAddWaypoint, 
                 <div className="font-semibold text-sm truncate mt-0.5">{poi.name}</div>
                 {poi.cuisine && <div className="text-xs text-dim truncate">🍽️ {poi.cuisine}</div>}
                 {poi.openingHours && <div className="text-xs text-dim truncate">🕒 {poi.openingHours}</div>}
+                {poi.address && <div className="text-xs text-dim truncate">📮 {poi.address}</div>}
                 <div className="text-xs text-dim mt-0.5">
                   {poi.distFromRoute != null && <>📍 ห่างเส้นทาง ~{formatDistance(poi.distFromRoute)}</>}
                 </div>
@@ -78,6 +93,22 @@ export default function PoiList({ pois, savedKeys, onToggleSave, onAddWaypoint, 
                 {saved ? '❤️' : '🤍'}
               </button>
             </div>
+
+            {poi.features && poi.features.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {poi.features.map((f) => (
+                  <span key={f} className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80">
+                    {f}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {poi.phone && (
+              <a href={`tel:${poi.phone.replace(/[^\d+]/g, '')}`} className="text-xs text-brand font-medium">
+                📞 โทร {poi.phone}
+              </a>
+            )}
 
             <div className="grid grid-cols-3 gap-1.5">
               <button
