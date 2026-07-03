@@ -30,7 +30,34 @@
     <title>SAKTECHTRIP</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- boot loader — โชว์ระหว่างโหลด (แทนจอขาว) -->
+      <div id="boot" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#08080a;color:#8b8b93;font-family:'Sarabun',system-ui,sans-serif">
+        <div style="width:40px;height:40px;border:3px solid rgba(255,255,255,.12);border-top-color:#ff5a3c;border-radius:50%;animation:bspin .8s linear infinite"></div>
+        <div style="font-size:13px">🏍️ SAKTECHTRIP · กำลังโหลด…</div>
+      </div>
+    </div>
+    <style>@keyframes bspin{to{transform:rotate(360deg)}}</style>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // กู้คืนอัตโนมัติ: ถ้าแอปไม่เรนเดอร์ใน 12 วิ (จอขาว/แคช SW เสียหลัง deploy)
+      // → ยกเลิก service worker + ล้างแคช แล้วรีโหลด 1 ครั้ง (กันวนลูปด้วย sessionStorage)
+      (function () {
+        setTimeout(function () {
+          var boot = document.getElementById('boot')
+          // ถ้ายังเห็น boot loader อยู่ = React ยังไม่ mount = แอปพัง
+          if (!boot || !document.body.contains(boot)) return
+          if (sessionStorage.getItem('sw-healed')) return
+          sessionStorage.setItem('sw-healed', '1')
+          var done = function () { location.reload() }
+          if (window.caches) { try { caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k) }) }) } catch (e) {} }
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+              .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister() })) })
+              .finally(done)
+          } else done()
+        }, 12000)
+      })()
+    </script>
   </body>
 </html>

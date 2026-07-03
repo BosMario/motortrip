@@ -133,8 +133,14 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisteredSW(_url, reg) {
-      // เช็คเวอร์ชันใหม่ตอนเปิด + ทุก 1 นาที (กันค้างแคช)
-      if (reg) setInterval(() => reg.update().catch(() => {}), 60_000)
+      if (!reg) return
+      const check = () => reg.update().catch(() => {})
+      check() // เช็คทันทีตอนเปิด
+      setInterval(check, 30_000) // ทุก 30 วิ ระหว่างเปิดแอป
+      // สำคัญบน iOS: แอปถูกแช่แข็งตอนพับไว้ → เช็คใหม่ทุกครั้งที่กลับมาเปิด
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check()
+      })
     },
   })
   const [savedTrips, setSavedTrips] = useState<Trip[]>([])
@@ -251,13 +257,7 @@ export default function App() {
     setTimeout(() => setToast(''), 2600)
   }, [])
 
-  // มีเวอร์ชันใหม่ → อัปเดต+รีโหลดอัตโนมัติ (ไม่ต้องล้างแคชเอง)
-  useEffect(() => {
-    if (needRefresh) {
-      notify('กำลังอัปเดตเป็นเวอร์ชันใหม่…')
-      updateServiceWorker(true)
-    }
-  }, [needRefresh, notify, updateServiceWorker])
+  // มีเวอร์ชันใหม่ → โชว์แบนเนอร์ให้ผู้ใช้แตะอัปเดต (เห็นชัดว่ามีเวอร์ชันใหม่)
 
   // โหลดทริปที่บันทึก + ตรวจ URL แชร์ตอนเปิดแอป
   useEffect(() => {
@@ -1024,6 +1024,24 @@ export default function App() {
                 onToggleFollow={toggleFollow}
               />
             )}
+          </div>
+        )}
+
+        {/* แบนเนอร์อัปเดต — เห็นชัดว่ามีเวอร์ชันใหม่ */}
+        {needRefresh && (
+          <div className="absolute top-3 left-3 right-3 z-[1200] flex items-center gap-3 rounded-2xl border border-white/10 bg-black/90 backdrop-blur-xl px-4 py-3 shadow-card">
+            <span className="text-xl">✨</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">มีเวอร์ชันใหม่พร้อมแล้ว</div>
+              <div className="text-[11px] text-dim">แตะเพื่ออัปเดตเป็นเวอร์ชันล่าสุด</div>
+            </div>
+            <button
+              onClick={() => updateServiceWorker(true)}
+              className="shrink-0 text-sm font-bold px-4 py-2 rounded-xl text-white active:scale-95 transition"
+              style={{ background: 'linear-gradient(135deg,var(--g1),var(--g2))' }}
+            >
+              อัปเดต
+            </button>
           </div>
         )}
 
