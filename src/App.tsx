@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView'
-import BottomSheet, { type SheetSnap } from './components/BottomSheet'
 import SearchBox from './components/SearchBox'
 import WaypointList from './components/WaypointList'
 import TripSummary from './components/TripSummary'
@@ -31,7 +30,15 @@ import { decodeTripFromUrl, encodeTripToUrl, shareUrl } from './lib/share'
 import { formatDistance, formatDuration, haversine, uid } from './lib/format'
 import { useDebounced } from './hooks/useDebounced'
 
-type Tab = 'plan' | 'summary' | 'saved' | 'group'
+type Tab = 'map' | 'stops' | 'places' | 'summary' | 'group'
+
+const TABS: { id: Tab; icon: string; label: string }[] = [
+  { id: 'map', icon: '🗺️', label: 'แผนที่' },
+  { id: 'stops', icon: '📍', label: 'จุดแวะ' },
+  { id: 'places', icon: '☕', label: 'ร้าน' },
+  { id: 'summary', icon: '📋', label: 'สรุป' },
+  { id: 'group', icon: '👥', label: 'กลุ่ม' },
+]
 
 /** อ่านรหัสห้องกลุ่มจาก URL (#g=CODE) ตอนเปิดแอป */
 function readGroupCode(): string {
@@ -84,8 +91,7 @@ export default function App() {
   const [savedTrips, setSavedTrips] = useState<Trip[]>([])
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([])
   const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
-  const [tab, setTab] = useState<Tab>(() => (readGroupCode() ? 'group' : 'plan'))
-  const [snap, setSnap] = useState<SheetSnap>('half')
+  const [tab, setTab] = useState<Tab>(() => (readGroupCode() ? 'group' : 'map'))
   const [toast, setToast] = useState('')
 
   const group = useGroup()
@@ -197,7 +203,6 @@ export default function App() {
 
   const addWaypoint = (w: Omit<Waypoint, 'id'>) => {
     setWaypoints((prev) => [...prev, { ...w, id: uid() }])
-    if (snap === 'peek') setSnap('half')
   }
 
   const onPickSearch = (r: SearchResult) => {
@@ -318,13 +323,13 @@ export default function App() {
 
   const focusPoi = (poi: Poi) => {
     setFocus({ lat: poi.lat, lng: poi.lng, nonce: Date.now() })
-    if (snap === 'full') setSnap('half')
+    setTab('map')
   }
 
   const focusRider = (r: Rider) => {
     if (r.lat == null || r.lng == null) return
     setFocus({ lat: r.lat, lng: r.lng, nonce: Date.now() })
-    if (snap === 'full') setSnap('half')
+    setTab('map')
   }
 
   // ---- ต่อยอดกลุ่มทริป ----
@@ -341,7 +346,7 @@ export default function App() {
     const r = group.sharedRoute
     if (!r) return
     setWaypoints(r.waypoints.map((w) => ({ ...w, id: uid() })))
-    setTab('plan')
+    setTab('map')
     notify(`ใช้เส้นทาง “${r.name}” แล้ว`)
   }
 
@@ -428,7 +433,7 @@ export default function App() {
     setWaypoints(t.waypoints)
     setCurrentId(t.id)
     setPois([])
-    setTab('plan')
+    setTab('map')
     notify(`เปิดทริป “${t.name}”`)
   }
 
@@ -444,7 +449,7 @@ export default function App() {
     setPois([])
     setRoute(null)
     setCurrentId(uid())
-    setTab('plan')
+    setTab('map')
   }
 
   const onShare = async () => {
@@ -458,309 +463,245 @@ export default function App() {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col">
-      {/* แผนที่เต็มจอ */}
-      <div className="absolute inset-0">
-        <MapView
-          waypoints={waypoints}
-          routeCoords={route?.coordinates ?? []}
-          restPoints={restPoints}
-          pois={visiblePois}
-          riders={group.positioned}
-          myId={group.myId}
-          weatherEmojis={weatherEmojis}
-          addingPoint={addingPoint}
-          focus={focus}
-          onMapClick={onMapClick}
-          onRemoveWaypoint={removeWaypoint}
-          onAddPoi={addPoiAsWaypoint}
-        />
-      </div>
-
-      {/* แถบบนสุด: ชื่อแอป + ปุ่มปักหมุด/ทริปใหม่ */}
-      <div className="absolute top-0 inset-x-0 pt-safe z-[1100] pointer-events-none">
-        <div className="flex items-center justify-between gap-2 px-3 pt-2 pointer-events-none">
-          <div className="pointer-events-auto rounded-full pl-2.5 pr-4 py-2 flex items-center gap-2 border border-white/10 bg-black/55 backdrop-blur-xl shadow-card">
-            <span className="w-6 h-6 rounded-full grid place-items-center text-[13px]" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
+    <div className="fixed inset-0 flex flex-col bg-ink-950">
+      {/* ===== Header: โลโก้ + สถิติเส้นทาง ===== */}
+      <header className="shrink-0 pt-safe px-3.5 pb-2 z-[1002] border-b border-white/[0.06] bg-black/50 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-2 pt-1.5">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full grid place-items-center text-sm" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>🏍️</span>
             <span className="font-bold text-sm tracking-tight">MOTO<span className="text-brand">TRIP</span></span>
           </div>
-          <div className="flex gap-2 pointer-events-auto">
-            <button
-              onClick={() => setAddingPoint((v) => !v)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold backdrop-blur-xl border transition active:scale-95 ${
-                addingPoint
-                  ? 'text-white border-transparent shadow-glow'
-                  : 'text-white/90 border-white/10 bg-black/55'
-              }`}
-              style={addingPoint ? { background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' } : undefined}
-            >
-              {addingPoint ? '📍 แตะแผนที่…' : '📍 ปักหมุด'}
-            </button>
-            <button
-              onClick={newTrip}
-              className="rounded-full w-10 h-10 grid place-items-center text-lg border border-white/10 bg-black/55 backdrop-blur-xl text-white/90 active:scale-95 transition"
-              aria-label="ทริปใหม่"
-            >
-              ＋
-            </button>
-          </div>
-        </div>
-        {addingPoint && (
-          <p className="mx-3 mt-2 text-xs text-white rounded-lg px-3 py-1.5 pointer-events-auto inline-block shadow-glow" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>
-            แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
-          </p>
-        )}
-      </div>
-
-      {/* toast */}
-      {toast && (
-        <div className="absolute top-safe left-1/2 -translate-x-1/2 mt-16 z-[1300] pointer-events-none">
-          <div className="border border-white/10 bg-black/80 backdrop-blur-xl text-white text-sm px-4 py-2 rounded-full shadow-card">{toast}</div>
-        </div>
-      )}
-
-      {/* Bottom sheet */}
-      <BottomSheet
-        snap={snap}
-        onSnapChange={setSnap}
-        header={
-          <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-xl p-1">
-            {(
-              [
-                ['plan', 'วางแผน'],
-                ['summary', 'สรุป'],
-                ['saved', 'บันทึก'],
-                ['group', group.roomCode ? `กลุ่ม·${group.riders.length}` : 'กลุ่ม'],
-              ] as [Tab, string][]
-            ).map(([t, label]) => (
-              <button
-                key={t}
-                onClick={() => {
-                  setTab(t)
-                  if (snap === 'peek') setSnap('half')
-                }}
-                className={`flex-1 py-2 rounded-lg text-[13px] font-semibold tracking-tight transition ${
-                  tab === t ? 'bg-white/[0.08] text-white shadow-inner ring-1 ring-white/10' : 'text-dim'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {tab === 'plan' && (
-          <div className="flex flex-col gap-3 pt-1">
-            <SearchBox onPick={onPickSearch} />
-
-            <button
-              onClick={useCurrentLocation}
-              disabled={locating}
-              className="btn btn-ghost w-full py-2.5 text-sm disabled:opacity-50"
-            >
-              {locating ? 'กำลังหาตำแหน่ง…' : '📍 ใช้ตำแหน่งปัจจุบันเป็นจุดเริ่ม'}
-            </button>
-
-            {/* สถานะเส้นทาง — การ์ดสถิติ */}
-            <div className="card px-4 py-3">
-              {routeLoading ? (
-                <span className="text-dim animate-pulse text-sm">กำลังคำนวณเส้นทาง…</span>
-              ) : route ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="label">ระยะทางรวม</div>
-                    <div className="text-2xl font-bold tracking-tight mt-0.5">{formatDistance(route.distance)}</div>
-                  </div>
-                  <div>
-                    <div className="label">เวลา (เผื่อพัก)</div>
-                    <div className="text-2xl font-bold tracking-tight mt-0.5">{formatDuration(route.duration, true)}</div>
-                  </div>
-                </div>
-              ) : (
-                <span className="text-dim text-sm">เพิ่ม ≥ 2 จุดเพื่อคำนวณเส้นทาง</span>
-              )}
+          {route ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-sm">{formatDistance(route.distance)}</span>
+              <span className="text-dim">·</span>
+              <span className="font-bold text-sm">{formatDuration(route.duration, true)}</span>
+              <span className="text-dim">· {waypoints.length} จุด</span>
             </div>
-            {routeError && (
-              <p className="text-xs text-[#ff6a5f] bg-[#ff3b30]/10 border border-[#ff3b30]/25 rounded-lg px-3 py-2">
-                ⚠️ {routeError}
+          ) : (
+            <span className="text-xs text-dim">{routeLoading ? 'กำลังคำนวณเส้นทาง…' : `${waypoints.length} จุดแวะ`}</span>
+          )}
+        </div>
+      </header>
+
+      {/* ===== เนื้อหา: แผนที่ (mount ค้างไว้) + หน้าอื่นทับด้านบน ===== */}
+      <main className="relative flex-1 overflow-hidden">
+        <div className="absolute inset-0">
+          <MapView
+            waypoints={waypoints}
+            routeCoords={route?.coordinates ?? []}
+            restPoints={restPoints}
+            pois={visiblePois}
+            riders={group.positioned}
+            myId={group.myId}
+            weatherEmojis={weatherEmojis}
+            addingPoint={addingPoint}
+            focus={focus}
+            onMapClick={onMapClick}
+            onRemoveWaypoint={removeWaypoint}
+            onAddPoi={addPoiAsWaypoint}
+          />
+        </div>
+
+        {/* ── หน้าแผนที่: ค้นหา + ปุ่มควบคุมลอยบนแผนที่ ── */}
+        {tab === 'map' && (
+          <div className="absolute top-0 inset-x-0 z-[500] p-3 flex flex-col gap-2">
+            <SearchBox onPick={onPickSearch} />
+            <div className="flex gap-2">
+              <button
+                onClick={useCurrentLocation}
+                disabled={locating}
+                className="flex-1 rounded-xl py-2.5 text-xs font-semibold border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition disabled:opacity-50"
+              >
+                {locating ? 'กำลังหา…' : '📍 ตำแหน่งฉัน'}
+              </button>
+              <button
+                onClick={() => setAddingPoint((v) => !v)}
+                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold border backdrop-blur-xl transition active:scale-95 ${
+                  addingPoint ? 'text-white border-transparent shadow-glow' : 'text-white/90 border-white/10 bg-black/60'
+                }`}
+                style={addingPoint ? { background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' } : undefined}
+              >
+                {addingPoint ? '📌 แตะแผนที่…' : '📌 ปักหมุด'}
+              </button>
+              <button
+                onClick={newTrip}
+                className="w-11 rounded-xl grid place-items-center text-lg border border-white/10 bg-black/60 backdrop-blur-xl text-white/90 active:scale-95 transition"
+                aria-label="ทริปใหม่"
+              >
+                ＋
+              </button>
+            </div>
+            {addingPoint && (
+              <p className="text-xs text-white rounded-lg px-3 py-1.5 self-start shadow-glow" style={{ background: 'linear-gradient(135deg,#ff7a45,#ff2d55)' }}>
+                แตะตำแหน่งบนแผนที่เพื่อปักหมุดจุดแวะเอง
               </p>
             )}
+            {routeError && (
+              <p className="text-xs text-[#ff6a5f] bg-black/70 border border-[#ff3b30]/40 rounded-lg px-3 py-2">⚠️ {routeError}</p>
+            )}
+          </div>
+        )}
 
-            {/* ไป-กลับ */}
+        {/* ── หน้าอื่น ๆ (ทับแผนที่เต็มจอ) ── */}
+        {tab !== 'map' && (
+          <div className="absolute inset-0 z-[1001] overflow-y-auto no-scrollbar bg-ink-950 px-4 pt-4 pb-6">
+            {tab === 'stops' && (
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setRoundTrip((v) => !v)}
+                  className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm border transition ${roundTrip ? 'chip-on' : 'card-2 text-dim'}`}
+                >
+                  <span>🔁 ทริปไป-กลับ (วนกลับจุดเริ่ม)</span>
+                  <span className={`w-9 h-5 rounded-full relative transition ${roundTrip ? 'bg-white/30' : 'bg-white/10'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${roundTrip ? 'left-[18px]' : 'left-0.5'}`} />
+                  </span>
+                </button>
+                <WaypointList waypoints={waypoints} route={route} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
+                <p className="text-[11px] text-dim text-center px-2 leading-relaxed">
+                  เพิ่มจุดแวะได้ที่แท็บ “🗺️ แผนที่” (ค้นหา / ปักหมุด / ตำแหน่งฉัน)<br />ลาก ⠿ เพื่อสลับลำดับ
+                </p>
+              </div>
+            )}
+
+            {tab === 'places' && (
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-1.5">
+                  {ALL_KINDS.map((k) => {
+                    const on = kinds.has(k)
+                    const meta = KIND_META[k]
+                    return (
+                      <button key={k} onClick={() => toggleKind(k)} className={`chip flex-1 py-2 ${on ? 'chip-on' : ''}`}>
+                        {meta.emoji} {meta.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <button onClick={searchPois} disabled={poiLoading} className="btn btn-primary w-full py-3">
+                  {poiLoading ? 'กำลังค้นหา…' : '🔎 ค้นหาร้าน/ปั๊มตามเส้นทาง'}
+                </button>
+                {poiError && <p className="text-xs text-[#ff6a5f]">⚠️ {poiError}</p>}
+                {visiblePois.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-dim">
+                        ⛽ {visiblePois.filter((p) => p.kind === 'fuel').length} · ☕ {visiblePois.filter((p) => p.kind === 'cafe').length} · 🍜{' '}
+                        {visiblePois.filter((p) => p.kind === 'restaurant').length} · เรียงตามนิยม
+                      </span>
+                      <button onClick={() => setPois([])} className="text-xs text-[#ff6a5f]">
+                        ล้าง
+                      </button>
+                    </div>
+                    <PoiList pois={visiblePois} savedKeys={savedKeys} onToggleSave={toggleSavePlace} onAddWaypoint={addPoiAsWaypoint} onFocus={focusPoi} />
+                  </>
+                )}
+                {savedPlaces.length > 0 && (
+                  <div className="border-t border-white/[0.07] pt-3">
+                    <h3 className="label mb-2 px-1">❤️ ร้านที่บันทึก ({savedPlaces.length})</h3>
+                    <SavedPlaces places={savedPlaces} onAddWaypoint={addPoiAsWaypoint} onRemove={removePlace} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'summary' && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="label flex flex-col gap-1.5">
+                    ชื่อทริป
+                    <input value={name} onChange={(e) => setName(e.target.value)} className="field px-3 py-2.5 text-sm normal-case tracking-normal" />
+                  </label>
+                  <label className="label flex flex-col gap-1.5">
+                    วันเริ่มทริป
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field px-3 py-2.5 text-sm normal-case tracking-normal" />
+                  </label>
+                </div>
+                <WeatherPanel points={weather} loading={weatherLoading} error={weatherError} usedToday={weatherUsedToday} hasWaypoints={waypoints.length > 0} onFetch={fetchWeather} />
+                <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
+                <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
+                  {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={saveTrip} className="btn btn-primary py-3">💾 บันทึกทริป</button>
+                  <button onClick={onShare} className="btn btn-ghost py-3">🔗 แชร์ทริป</button>
+                </div>
+                <div className="border-t border-white/[0.07] pt-3">
+                  <h3 className="label mb-2 px-1">🗺️ ทริปที่บันทึก</h3>
+                  <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
+                </div>
+              </div>
+            )}
+
+            {tab === 'group' && (
+              <GroupPanel
+                roomCode={group.roomCode}
+                connected={group.connected}
+                riders={group.riders}
+                myId={group.myId}
+                sharing={group.sharing}
+                myPos={group.myPos}
+                error={group.error}
+                wakeActive={group.wakeActive}
+                wakeSupported={group.wakeSupported}
+                defaultProfile={profile}
+                initialCode={groupInitialCode}
+                waypointCount={waypoints.length}
+                sharedRoute={group.sharedRoute}
+                messages={group.messages}
+                followId={followId}
+                onJoin={(code, prof) => {
+                  group.join(code, prof)
+                  notify(`เข้าห้อง ${code} แล้ว`)
+                }}
+                onLeave={() => {
+                  setFollowId(null)
+                  group.leave()
+                }}
+                onToggleShare={group.setSharing}
+                onFocusRider={focusRider}
+                onNotify={notify}
+                onShareRoute={shareMyRoute}
+                onUseRoute={useSharedRoute}
+                onSendMessage={(t, e) => {
+                  if (group.sendMessage(t, e) === false) notify('ส่งถี่เกินไป เดี๋ยวก่อนนะ ⏳')
+                }}
+                onSOS={() => {
+                  if (group.sendSOS() === false) notify('เพิ่งส่ง SOS ไป รอสักครู่')
+                }}
+                onToggleFollow={toggleFollow}
+              />
+            )}
+          </div>
+        )}
+
+        {/* toast */}
+        {toast && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1100] pointer-events-none">
+            <div className="border border-white/10 bg-black/85 backdrop-blur-xl text-white text-sm px-4 py-2 rounded-full shadow-card">{toast}</div>
+          </div>
+        )}
+      </main>
+
+      {/* ===== เมนูล่าง ===== */}
+      <nav className="shrink-0 flex pb-safe border-t border-white/10 bg-black/70 backdrop-blur-xl z-[1002]">
+        {TABS.map((t) => {
+          const active = tab === t.id
+          const badge = t.id === 'group' && group.roomCode ? `·${group.riders.length}` : ''
+          return (
             <button
-              onClick={() => setRoundTrip((v) => !v)}
-              className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm border transition ${
-                roundTrip ? 'chip-on' : 'card-2 text-dim'
-              }`}
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 flex flex-col items-center gap-0.5 pt-2 pb-1.5 transition active:scale-95 ${active ? 'text-brand' : 'text-dim'}`}
             >
-              <span>🔁 ทริปไป-กลับ (วนกลับจุดเริ่ม)</span>
-              <span
-                className={`w-9 h-5 rounded-full relative transition ${roundTrip ? 'bg-white/30' : 'bg-white/10'}`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${roundTrip ? 'left-[18px]' : 'left-0.5'}`}
-                />
+              <span className="text-xl leading-none">{t.icon}</span>
+              <span className="text-[10px] font-semibold tracking-tight">
+                {t.label}
+                {badge}
               </span>
             </button>
-
-            <WaypointList waypoints={waypoints} route={route} onRemove={removeWaypoint} onReorder={reorderWaypoints} />
-
-            {/* ค้นหาจุดแวะตามเส้นทาง */}
-            <div className="border-t border-white/[0.07] pt-3">
-              {/* เลือกหมวดที่จะค้นหา */}
-              <div className="flex gap-1.5 mb-2">
-                {ALL_KINDS.map((k) => {
-                  const on = kinds.has(k)
-                  const meta = KIND_META[k]
-                  return (
-                    <button
-                      key={k}
-                      onClick={() => toggleKind(k)}
-                      className={`chip flex-1 py-2 ${on ? 'chip-on' : ''}`}
-                    >
-                      {meta.emoji} {meta.label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <button
-                onClick={searchPois}
-                disabled={poiLoading}
-                className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
-              >
-                {poiLoading ? 'กำลังค้นหา…' : '🔎 ค้นหาจุดแวะตามเส้นทาง'}
-              </button>
-              {poiError && <p className="text-xs text-[#ff6a5f] mt-2">⚠️ {poiError}</p>}
-              {visiblePois.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-3 mb-2">
-                    <span className="text-xs text-dim">
-                      ⛽ {visiblePois.filter((p) => p.kind === 'fuel').length} · ☕{' '}
-                      {visiblePois.filter((p) => p.kind === 'cafe').length} · 🍜{' '}
-                      {visiblePois.filter((p) => p.kind === 'restaurant').length} · เรียงตามนิยม
-                    </span>
-                    <button onClick={() => setPois([])} className="text-xs text-[#ff6a5f]">
-                      ล้างผลลัพธ์
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-dim mb-2 leading-snug">
-                    * อันดับประเมินจากความครบถ้วนของข้อมูล OSM (ไม่มีคะแนนรีวิว) — แตะรูปเพื่อดูบนแผนที่ · กดหมวดด้านบนเพื่อกรอง
-                  </p>
-                  <PoiList
-                    pois={visiblePois}
-                    savedKeys={savedKeys}
-                    onToggleSave={toggleSavePlace}
-                    onAddWaypoint={addPoiAsWaypoint}
-                    onFocus={focusPoi}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {tab === 'summary' && (
-          <div className="flex flex-col gap-3 pt-1">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="label flex flex-col gap-1.5">
-                ชื่อทริป
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="field px-3 py-2.5 text-sm normal-case tracking-normal"
-                />
-              </label>
-              <label className="label flex flex-col gap-1.5">
-                วันเริ่มทริป
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="field px-3 py-2.5 text-sm normal-case tracking-normal"
-                />
-              </label>
-            </div>
-
-            <WeatherPanel
-              points={weather}
-              loading={weatherLoading}
-              error={weatherError}
-              usedToday={weatherUsedToday}
-              hasWaypoints={waypoints.length > 0}
-              onFetch={fetchWeather}
-            />
-
-            <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} />
-
-            <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
-              {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
-            </button>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={saveTrip} className="btn btn-primary py-3">
-                💾 บันทึกทริป
-              </button>
-              <button onClick={onShare} className="btn btn-ghost py-3">
-                🔗 แชร์ทริป
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === 'saved' && (
-          <div className="pt-1 flex flex-col gap-5">
-            <section>
-              <h3 className="label mb-2 px-1">🗺️ ทริปที่บันทึก</h3>
-              <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
-            </section>
-            <section>
-              <h3 className="label mb-2 px-1">❤️ ร้านที่บันทึก ({savedPlaces.length})</h3>
-              <SavedPlaces places={savedPlaces} onAddWaypoint={addPoiAsWaypoint} onRemove={removePlace} />
-            </section>
-          </div>
-        )}
-
-        {tab === 'group' && (
-          <GroupPanel
-            roomCode={group.roomCode}
-            connected={group.connected}
-            riders={group.riders}
-            myId={group.myId}
-            sharing={group.sharing}
-            myPos={group.myPos}
-            error={group.error}
-            wakeActive={group.wakeActive}
-            wakeSupported={group.wakeSupported}
-            defaultProfile={profile}
-            initialCode={groupInitialCode}
-            waypointCount={waypoints.length}
-            sharedRoute={group.sharedRoute}
-            messages={group.messages}
-            followId={followId}
-            onJoin={(code, prof) => {
-              group.join(code, prof)
-              notify(`เข้าห้อง ${code} แล้ว`)
-            }}
-            onLeave={() => {
-              setFollowId(null)
-              group.leave()
-            }}
-            onToggleShare={group.setSharing}
-            onFocusRider={focusRider}
-            onNotify={notify}
-            onShareRoute={shareMyRoute}
-            onUseRoute={useSharedRoute}
-            onSendMessage={(t, e) => {
-              if (group.sendMessage(t, e) === false) notify('ส่งถี่เกินไป เดี๋ยวก่อนนะ ⏳')
-            }}
-            onSOS={() => {
-              if (group.sendSOS() === false) notify('เพิ่งส่ง SOS ไป รอสักครู่')
-            }}
-            onToggleFollow={toggleFollow}
-          />
-        )}
-      </BottomSheet>
+          )
+        })}
+      </nav>
     </div>
   )
 }
