@@ -23,6 +23,29 @@ export default {
       return stub.fetch(request)
     }
 
+    // ---- Sync ทริปข้ามเครื่อง (KV) ----
+    const CORS = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET,PUT,OPTIONS',
+      'access-control-allow-headers': 'content-type',
+    }
+    const sm = url.pathname.match(/^\/api\/sync\/([A-Za-z0-9_-]{6,20})$/)
+    if (sm) {
+      const key = 'sync:' + sm[1].toUpperCase()
+      if (request.method === 'OPTIONS') return new Response(null, { headers: CORS })
+      if (request.method === 'GET') {
+        const val = await env.SYNC.get(key)
+        return new Response(val || 'null', { headers: { ...CORS, 'content-type': 'application/json' } })
+      }
+      if (request.method === 'PUT') {
+        const body = await request.text()
+        if (body.length > 1_000_000) return new Response('too large', { status: 413, headers: CORS })
+        await env.SYNC.put(key, body, { expirationTtl: 60 * 60 * 24 * 365 }) // เก็บ 1 ปี
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'content-type': 'application/json' } })
+      }
+      return new Response('method not allowed', { status: 405, headers: CORS })
+    }
+
     return new Response('Not found', { status: 404 })
   },
 }

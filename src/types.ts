@@ -91,6 +91,9 @@ export interface Trip {
   date: string
   waypoints: Waypoint[]
   updatedAt: number
+  /** ระยะทาง/เวลาที่คำนวณไว้ตอนบันทึก (ไว้ทำสถิติ) */
+  distanceM?: number
+  durationS?: number
 }
 
 /** โปรไฟล์ไรเดอร์ในกลุ่มทริป */

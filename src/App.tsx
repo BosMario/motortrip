@@ -10,6 +10,7 @@ import GroupPanel from './components/GroupPanel'
 import WeatherPanel from './components/WeatherPanel'
 import TripEstimate from './components/TripEstimate'
 import ElevationProfile from './components/ElevationProfile'
+import SyncPanel from './components/SyncPanel'
 import { fetchTripWeather, type WeatherPoint } from './lib/weather'
 import { useGroup, loadProfile } from './hooks/useGroup'
 import type { Poi, PoiKind, Rider, RouteData, SavedPlace, Trip, Waypoint } from './types'
@@ -25,6 +26,8 @@ import {
   loadPlaces,
   loadTrips,
   placeKey,
+  savePlaces,
+  saveTrips,
   togglePlace,
   upsertTrip,
 } from './lib/storage'
@@ -138,6 +141,16 @@ export default function App() {
 
   // emoji อากาศเรียงตาม waypoints (ไว้โชว์บนหมุดแผนที่)
   const weatherEmojis = useMemo(() => weather.map((w) => (w.available ? w.emoji : undefined)), [weather])
+
+  // สถิติจากทริปที่บันทึก
+  const stats = useMemo(
+    () => ({
+      count: savedTrips.length,
+      totalM: savedTrips.reduce((s, t) => s + (t.distanceM || 0), 0),
+      totalStops: savedTrips.reduce((s, t) => s + t.waypoints.length, 0),
+    }),
+    [savedTrips]
+  )
 
   // สมาชิกเห็นร้านที่แอดมินแชร์ (ไม่เรียก Overpass เอง) · แอดมิน/เดี่ยวใช้ผลค้นหาตัวเอง
   const visiblePois = useMemo(() => {
@@ -462,6 +475,13 @@ export default function App() {
 
   const removePlace = (key: string) => setSavedPlaces(deletePlace(key))
 
+  const onSyncPull = (t: Trip[], p: SavedPlace[]) => {
+    saveTrips(t)
+    setSavedTrips(loadTrips())
+    savePlaces(p)
+    setSavedPlaces(loadPlaces())
+  }
+
   const searchPois = async () => {
     const coords = route?.coordinates?.length
       ? route.coordinates
@@ -494,6 +514,8 @@ export default function App() {
     date,
     waypoints,
     updatedAt: Date.now(),
+    distanceM: route?.distance,
+    durationS: route?.duration,
   })
 
   const saveTrip = () => {
@@ -731,10 +753,31 @@ export default function App() {
                   <button onClick={saveTrip} className="btn btn-primary py-3">💾 บันทึกทริป</button>
                   <button onClick={onShare} className="btn btn-ghost py-3">🔗 แชร์ทริป</button>
                 </div>
+                {stats.count > 0 && (
+                  <div className="card p-3">
+                    <div className="label mb-2">📊 สถิติของฉัน</div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <div className="text-2xl font-bold tracking-tight">{stats.count}</div>
+                        <div className="text-[10px] text-dim">ทริปที่บันทึก</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold tracking-tight">{formatDistance(stats.totalM)}</div>
+                        <div className="text-[10px] text-dim">ระยะทางรวม</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold tracking-tight">{stats.totalStops}</div>
+                        <div className="text-[10px] text-dim">จุดแวะรวม</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="border-t border-white/[0.07] pt-3">
                   <h3 className="label mb-2 px-1">🗺️ ทริปที่บันทึก</h3>
                   <SavedTrips trips={savedTrips} currentId={currentId} onLoad={loadTrip} onDelete={removeTrip} />
                 </div>
+                <SyncPanel trips={savedTrips} places={savedPlaces} onPull={onSyncPull} onNotify={notify} />
                 <p className="text-center text-[10px] text-dim pt-2 pb-1">
                   SAKTECHTRIP v{__APP_VERSION__} · build {__BUILD_HASH__} · {__BUILD_DATE__}
                 </p>

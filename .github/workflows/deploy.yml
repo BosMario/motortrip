@@ -29,16 +29,19 @@ jobs:
         env:
           VITE_GROUP_WS: wss://moto-trip-group.thanachai-bos.workers.dev
 
-      - name: Deploy Worker (กลุ่มทริป realtime)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
-
+      # Pages ก่อน — ให้เว็บอัปเดตเสมอ แม้ worker deploy จะติดสิทธิ์ KV
       - name: Deploy Pages (เว็บแอป)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=moto-trip-planner --branch=main
+
+      # Worker (กลุ่ม realtime + KV sync) — ต้องการ token perm: Workers Scripts:Edit + Workers KV Storage:Edit
+      - name: Deploy Worker
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

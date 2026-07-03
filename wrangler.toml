@@ -12,3 +12,8 @@ class_name = "GroupRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GroupRoom"]
+
+# KV สำหรับ sync ทริปข้ามเครื่อง (free tier)
+[[kv_namespaces]]
+binding = "SYNC"
+id = "57282ef190e342e3bfdf1c66769c6506"
