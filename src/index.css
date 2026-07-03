@@ -287,3 +287,24 @@ button {
     stroke-dashoffset: -16;
   }
 }
+
+/* ---------- rider วิ่งตามเส้นทาง (game-style preview) ---------- */
+.ghost-rider {
+  font-size: 19px;
+  line-height: 1;
+  filter: drop-shadow(0 0 7px rgba(255, 90, 31, 0.95));
+  animation: ghost-bob 0.55s ease-in-out infinite alternate;
+}
+@keyframes ghost-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2.5px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ghost-rider {
+    animation: none;
+  }
+}

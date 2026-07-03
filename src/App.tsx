@@ -362,6 +362,12 @@ export default function App() {
     if (m.id !== group.myId) notify(`${m.emoji} ${m.name}: ${m.text}`)
   }, [group.messages, group.myId, notify])
 
+  // เซิร์ฟเวอร์บล็อกเพราะฟลัด
+  useEffect(() => {
+    if (!group.blocked) return
+    notify(group.blocked.reason === 'sos-cooldown' ? 'SOS ยัง cooldown อยู่' : 'ส่งข้อความถี่เกินไป ⏳')
+  }, [group.blocked, notify])
+
   // แจ้งเตือน SOS
   useEffect(() => {
     const s = group.sos
@@ -745,8 +751,12 @@ export default function App() {
             onNotify={notify}
             onShareRoute={shareMyRoute}
             onUseRoute={useSharedRoute}
-            onSendMessage={group.sendMessage}
-            onSOS={group.sendSOS}
+            onSendMessage={(t, e) => {
+              if (group.sendMessage(t, e) === false) notify('ส่งถี่เกินไป เดี๋ยวก่อนนะ ⏳')
+            }}
+            onSOS={() => {
+              if (group.sendSOS() === false) notify('เพิ่งส่ง SOS ไป รอสักครู่')
+            }}
             onToggleFollow={toggleFollow}
           />
         )}

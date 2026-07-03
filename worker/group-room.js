@@ -128,6 +128,20 @@ export class GroupRoom {
     if (data.type === 'msg') {
       const text = String(data.text || '').slice(0, 120)
       if (!text) return
+      // กันฟลัด: ไม่เกิน 5 ข้อความ/10 วิ และห่างกันอย่างน้อย 800ms
+      const now = Date.now()
+      const times = (att.msgTs || []).filter((t) => now - t < 10000)
+      if (times.length >= 5 || (times.length && now - times[times.length - 1] < 800)) {
+        try {
+          ws.send(JSON.stringify({ type: 'blocked', reason: 'flood' }))
+        } catch {
+          /* noop */
+        }
+        return
+      }
+      times.push(now)
+      att.msgTs = times
+      ws.serializeAttachment(att)
       this.broadcast({
         type: 'msg',
         id: att.id,
@@ -135,12 +149,24 @@ export class GroupRoom {
         color: att.color,
         emoji: typeof data.emoji === 'string' ? data.emoji.slice(0, 8) : '',
         text,
-        ts: Date.now(),
+        ts: now,
       })
       return
     }
 
     if (data.type === 'sos') {
+      // กันสแปม SOS: 1 ครั้ง/20 วิ ต่อคน
+      const now = Date.now()
+      if (att.sosTs && now - att.sosTs < 20000) {
+        try {
+          ws.send(JSON.stringify({ type: 'blocked', reason: 'sos-cooldown' }))
+        } catch {
+          /* noop */
+        }
+        return
+      }
+      att.sosTs = now
+      ws.serializeAttachment(att)
       this.broadcast({
         type: 'sos',
         id: att.id,
@@ -148,7 +174,7 @@ export class GroupRoom {
         color: att.color,
         lat: att.lat,
         lng: att.lng,
-        ts: Date.now(),
+        ts: now,
       })
       return
     }

@@ -80,6 +80,7 @@ export default function GroupPanel({
   const [color, setColor] = useState(defaultProfile.color)
   const [code, setCode] = useState(initialCode)
   const [, forceTick] = useState(0)
+  const [msgCooldown, setMsgCooldown] = useState(false)
 
   // อัปเดต "เห็นล่าสุด" ทุก 3 วิ
   useEffect(() => {
@@ -259,8 +260,13 @@ export default function GroupPanel({
           {QUICK_MSGS.map((m) => (
             <button
               key={m.text}
-              onClick={() => onSendMessage(m.text, m.emoji)}
-              className="btn btn-ghost text-[11px] py-2 leading-tight flex flex-col items-center gap-0.5"
+              disabled={msgCooldown}
+              onClick={() => {
+                onSendMessage(m.text, m.emoji)
+                setMsgCooldown(true)
+                setTimeout(() => setMsgCooldown(false), 1300) // กันกดรัว
+              }}
+              className="btn btn-ghost text-[11px] py-2 leading-tight flex flex-col items-center gap-0.5 disabled:opacity-40"
             >
               <span className="text-base leading-none">{m.emoji}</span>
               {m.text}

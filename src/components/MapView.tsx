@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import type { Poi, Rider, Waypoint } from '../types'
@@ -49,6 +49,49 @@ function FitBounds({ waypoints, routeCoords }: { waypoints: Waypoint[]; routeCoo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
+  return null
+}
+
+/** rider เคลื่อนวนตามเส้นทางแบบเกม (แสดงเป็น preview เมื่อยังไม่มีเพื่อนในกลุ่ม) */
+function RouteRider({ coords }: { coords: [number, number][] }) {
+  const map = useMap()
+  const raf = useRef(0)
+  useEffect(() => {
+    if (coords.length < 2) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+
+    const cum = [0]
+    let total = 0
+    for (let i = 1; i < coords.length; i++) {
+      const dLat = coords[i][0] - coords[i - 1][0]
+      const dLng = (coords[i][1] - coords[i - 1][1]) * Math.cos((coords[i - 1][0] * Math.PI) / 180)
+      total += Math.hypot(dLat, dLng)
+      cum.push(total)
+    }
+    if (total === 0) return
+
+    const icon = L.divIcon({ className: 'moto-marker', html: '<div class="ghost-rider">🏍️</div>', iconSize: [26, 26], iconAnchor: [13, 13] })
+    const marker = L.marker(coords[0], { icon, interactive: false, keyboard: false, zIndexOffset: 400 }).addTo(map)
+
+    const duration = 9000 // วิ่งครบเส้นทางใน ~9 วิ แล้ววน
+    let startT = 0
+    const step = (now: number) => {
+      if (!startT) startT = now
+      const t = (((now - startT) % duration) / duration) * total
+      let i = 1
+      while (i < cum.length && cum[i] < t) i++
+      const f = (t - cum[i - 1]) / (cum[i] - cum[i - 1] || 1)
+      const lat = coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * f
+      const lng = coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * f
+      marker.setLatLng([lat, lng])
+      raf.current = requestAnimationFrame(step)
+    }
+    raf.current = requestAnimationFrame(step)
+    return () => {
+      cancelAnimationFrame(raf.current)
+      marker.remove()
+    }
+  }, [coords, map])
   return null
 }
 
@@ -103,6 +146,7 @@ export default function MapView({
             positions={routeCoords}
             pathOptions={{ color: '#ffffff', weight: 2.5, opacity: 0.9, dashArray: '1 15' }}
           />
+          {riders.length === 0 && <RouteRider coords={routeCoords} />}
         </>
       )}
 

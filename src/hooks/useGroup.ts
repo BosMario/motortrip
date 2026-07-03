@@ -36,8 +36,12 @@ export function useGroup() {
   const [messages, setMessages] = useState<GroupMessage[]>([])
   const [sos, setSos] = useState<SosAlert | null>(null)
 
+  const [blocked, setBlocked] = useState<{ reason: string; ts: number } | null>(null)
+
   const clientRef = useRef<GroupClient | null>(null)
   const lastPos = useRef<{ lat: number; lng: number; heading?: number | null; speed?: number | null; ts: number } | null>(null)
+  const msgTimes = useRef<number[]>([]) // กันสแปมฝั่ง client
+  const sosTs = useRef(0)
   const wake = useWakeLock()
 
   const upsert = useCallback((r: Partial<Rider> & { id: string }) => {
@@ -53,6 +57,9 @@ export function useGroup() {
     setSharedRoute(null)
     setMessages([])
     setSos(null)
+    setBlocked(null)
+    msgTimes.current = []
+    sosTs.current = 0
     setRoomCode(code)
 
     const client = new GroupClient(code, profile, {
@@ -89,6 +96,9 @@ export function useGroup() {
           case 'sos':
             setSos(msg as SosAlert)
             break
+          case 'blocked':
+            setBlocked({ reason: msg.reason || 'flood', ts: Date.now() })
+            break
         }
       },
     })
@@ -116,12 +126,24 @@ export function useGroup() {
     clientRef.current?.emit({ type: 'route', route })
   }, [])
 
-  const sendMessage = useCallback((text: string, emoji = '') => {
+  // ส่งข้อความ: กันสแปม (ห่าง ≥1.2 วิ, ไม่เกิน 5 ข้อความ/10 วิ) — คืน false ถ้าถูกบล็อก
+  const sendMessage = useCallback((text: string, emoji = ''): boolean => {
+    const now = Date.now()
+    const recent = msgTimes.current.filter((t) => now - t < 10000)
+    if ((recent.length && now - recent[recent.length - 1] < 1200) || recent.length >= 5) return false
+    recent.push(now)
+    msgTimes.current = recent
     clientRef.current?.emit({ type: 'msg', text, emoji })
+    return true
   }, [])
 
-  const sendSOS = useCallback(() => {
+  // ส่ง SOS: ได้ 1 ครั้ง/20 วิ — คืน false ถ้ายัง cooldown
+  const sendSOS = useCallback((): boolean => {
+    const now = Date.now()
+    if (now - sosTs.current < 20000) return false
+    sosTs.current = now
     clientRef.current?.emit({ type: 'sos' })
+    return true
   }, [])
 
   const dismissSos = useCallback(() => setSos(null), [])
@@ -194,6 +216,7 @@ export function useGroup() {
     sharedRoute,
     messages,
     sos,
+    blocked,
     join,
     leave,
     updateProfile,
