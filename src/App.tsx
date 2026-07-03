@@ -174,7 +174,7 @@ export default function App() {
 
   // รายละเอียดเพิ่มเติมสำหรับการ์ดสรุป (ค่าน้ำมัน/เวลา/ฝน)
   const summaryExtra = useMemo<SummaryExtra>(() => {
-    let est: { bikes?: { id: string; kmPerLiter: number }[]; activeBikeId?: string; pricePerLiter?: number; depart?: string } = {}
+    let est: { bikes?: { id: string; name?: string; kmPerLiter: number }[]; activeBikeId?: string; pricePerLiter?: number; depart?: string } = {}
     try {
       est = JSON.parse(localStorage.getItem('moto-estimate-v2') || '{}')
     } catch {
@@ -193,6 +193,7 @@ export default function App() {
       departTime: route ? depart : undefined,
       arriveTime: route ? addHHMM(depart, (route.duration * 1.2) / 60) : undefined,
       rainAt,
+      bikeName: bike?.name,
     }
   }, [route, weather, totalDays])
 
@@ -900,7 +901,7 @@ export default function App() {
                   <WeatherRoute coords={route.coordinates} distanceM={route.distance} durationS={route.duration} tripDate={date} />
                 )}
                 <ElevationProfile routeCoords={route?.coordinates ?? []} />
-                <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} extra={summaryExtra} />
+                <TripSummary ref={summaryRef} name={name} date={date} waypoints={waypoints} route={route} extra={summaryExtra} weatherEmojis={weatherEmojis} />
                 <button onClick={exportSummary} disabled={exporting} className="btn btn-white py-3 disabled:opacity-50">
                   {exporting ? 'กำลังสร้างรูป…' : '📸 บันทึก/แชร์รูปสรุปทริป'}
                 </button>
